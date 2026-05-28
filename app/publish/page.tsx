@@ -1,8 +1,11 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   ArrowRight,
   CheckCircle2,
+  Clock3,
   FileText,
+  LockKeyhole,
   Search,
   ShieldCheck,
   Tags,
@@ -10,6 +13,8 @@ import {
   TrendingUp,
   UploadCloud,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { getAuthorPublishingAccess } from "@/lib/author-publishing-access";
 import { SectionHeading } from "@/components/section-heading";
 
 const publishFeatures = [
@@ -39,22 +44,22 @@ const tutorialSteps = [
   {
     icon: FileText,
     title: "1. Completa la ficha editorial",
-    text: "Agrega título, subtítulo, autor, descripción, nicho, categoría y palabras clave.",
+    text: "Agrega título, subtítulo, descripción, nicho, categoría, palabras clave, precio y promesa del libro.",
   },
   {
     icon: UploadCloud,
     title: "2. Sube portada y archivo",
-    text: "Carga la portada y el PDF/EPUB completo. El archivo del libro debe quedar protegido.",
+    text: "Carga la portada y el PDF/EPUB completo. El archivo del libro queda protegido.",
   },
   {
     icon: ShieldCheck,
     title: "3. Envíalo a evaluación",
-    text: "El libro no debe publicarse directo. Debe pasar por estado de revisión antes de salir al catálogo.",
+    text: "El libro queda como borrador o en revisión. No sale publicado directo al catálogo.",
   },
   {
     icon: CheckCircle2,
     title: "4. Aprobación y publicación",
-    text: "Cuando el libro esté aprobado, se publica en catálogo y se activa la compra/lectura.",
+    text: "Cuando el libro esté aprobado, se publica en catálogo y se activa compra/lectura.",
   },
 ];
 
@@ -69,7 +74,82 @@ const checklist = [
   "Estado editorial: borrador, evaluación o publicado.",
 ];
 
-export default function PublishPage() {
+function StatusCard({
+  allowed,
+  message,
+}: {
+  allowed: boolean;
+  message: string;
+}) {
+  if (allowed) {
+    return (
+      <div className="rounded-[28px] border border-emerald-200 bg-emerald-50 p-5 text-sm leading-7 text-emerald-900">
+        <div className="flex gap-3">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />
+          <div>
+            <p className="font-bold">Tu sección de autor está aprobada.</p>
+            <p>{message}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-5 text-sm leading-7 text-amber-900">
+      <div className="flex gap-3">
+        <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+        <div>
+          <p className="font-bold">Todavía no puedes publicar.</p>
+          <p>{message}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MainAction({
+  allowed,
+}: {
+  allowed: boolean;
+}) {
+  if (allowed) {
+    return (
+      <Link
+        href="/dashboard/books/new"
+        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-5 py-3 font-semibold text-white transition hover:opacity-90"
+      >
+        Crear nuevo libro
+        <ArrowRight className="h-4 w-4" />
+      </Link>
+    );
+  }
+
+  return (
+    <Link
+      href="/dashboard"
+      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-5 py-3 font-semibold text-white transition hover:opacity-90"
+    >
+      Ir al dashboard
+      <ArrowRight className="h-4 w-4" />
+    </Link>
+  );
+}
+
+export default async function PublishPage() {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    redirect(`/auth?next=${encodeURIComponent("/publish")}`);
+  }
+
+  const access = await getAuthorPublishingAccess(user.id);
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
       <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr]">
@@ -77,8 +157,10 @@ export default function PublishPage() {
           <SectionHeading
             eyebrow="Publicar"
             title="Publicar un libro no es subir un PDF y rezar."
-            description="Este módulo funciona como guía. El formulario real está en Nuevo libro, donde crearás la ficha completa y enviarás el libro a evaluación."
+            description="Este módulo funciona como guía. El formulario real está en Nuevo libro, pero solo autores con sección creada y aprobada pueden publicar."
           />
+
+          <StatusCard allowed={access.allowed} message={access.message} />
 
           <div className="grid gap-4 sm:grid-cols-2">
             {publishFeatures.map(({ icon: Icon, title, text }, index) => {
@@ -132,9 +214,9 @@ export default function PublishPage() {
             </h2>
 
             <p className="mt-3 text-sm leading-7 text-slate-700">
-              Ahora usaremos un solo formulario real. Primero creas el libro,
-              luego queda en evaluación, y después se aprueba o se rechaza. Más
-              limpio, menos duplicación, más tipo Amazon.
+              Usamos un solo formulario real. Primero creas el libro, luego
+              queda en evaluación, y después se aprueba o se rechaza. Más
+              limpio, menos duplicación, más tipo marketplace serio.
             </p>
 
             <div className="mt-6 space-y-4">
@@ -160,13 +242,7 @@ export default function PublishPage() {
             </div>
 
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link
-                href="/dashboard/books/new"
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-5 py-3 font-semibold text-white transition hover:opacity-90"
-              >
-                Crear nuevo libro
-                <ArrowRight className="h-4 w-4" />
-              </Link>
+              <MainAction allowed={access.allowed} />
 
               <Link
                 href="/dashboard/books/published"
@@ -177,12 +253,27 @@ export default function PublishPage() {
             </div>
           </div>
 
-          <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-5 text-sm leading-7 text-amber-900">
-            <strong>Nota importante:</strong> el botón “Crear nuevo libro” debe
-            llevar al único formulario real. Ahí el libro debería guardarse como{" "}
-            <code className="rounded bg-white px-1 py-0.5">draft</code> o{" "}
-            <code className="rounded bg-white px-1 py-0.5">under_review</code>,
-            no como publicado directo.
+          <div className="rounded-[28px] border border-slate-200 bg-white p-5 text-sm leading-7 text-slate-700 shadow-sm">
+            <div className="flex gap-3">
+              <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-brand-700" />
+              <div>
+                <p className="font-bold text-slate-950">
+                  Regla editorial activa
+                </p>
+                <p>
+                  Para publicar, el autor debe tener una sección creada y
+                  aprobada. El libro debe guardarse como{" "}
+                  <code className="rounded bg-slate-100 px-1 py-0.5">
+                    draft
+                  </code>{" "}
+                  o{" "}
+                  <code className="rounded bg-slate-100 px-1 py-0.5">
+                    under_review
+                  </code>
+                  , nunca como publicado directo sin revisión.
+                </p>
+              </div>
+            </div>
           </div>
         </section>
       </div>

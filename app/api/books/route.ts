@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthorPublishingAccess } from "@/lib/author-publishing-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -1025,7 +1026,14 @@ export async function POST(request: Request) {
 
   try {
     const effectiveUser = await getEffectiveUser();
-    const authorId = await getOrCreateAuthorProfile(effectiveUser);
+
+const authorAccess = await getAuthorPublishingAccess(effectiveUser.id);
+
+if (!authorAccess.allowed || !authorAccess.authorId) {
+  return jsonError(authorAccess.message, 403);
+}
+
+const authorId = authorAccess.authorId;
 
     const formData = await request.formData();
     const form = parseAndValidateForm(formData);
