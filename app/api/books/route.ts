@@ -10,23 +10,26 @@ const COVER_BUCKET = "book-covers";
 const FILE_BUCKET = "book-files";
 
 const SHORT_DESCRIPTION_LIMIT = 180;
-const DEFAULT_PREVIEW_PAGE_COUNT = 16;
+const DEFAULT_PREVIEW_PAGE_COUNT = 17;
 const MAX_PREVIEW_PAGE_COUNT = 50;
 
+const MAX_COVER_SIZE_MB = 10;
+const MAX_BOOK_SIZE_MB = 100;
+const MAX_COVER_SIZE_BYTES = MAX_COVER_SIZE_MB * 1024 * 1024;
+const MAX_BOOK_SIZE_BYTES = MAX_BOOK_SIZE_MB * 1024 * 1024;
+
+const ALLOWED_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
 const ALLOWED_BOOK_EXTENSIONS = new Set(["pdf", "epub"]);
-const ALLOWED_CREATE_STATUSES = new Set([
-  "draft",
-  "under_review",
-  "approved",
-  "published",
-]);
+
+const ALLOWED_CREATE_STATUSES = new Set(["draft", "under_review"]);
 
 const DEV_MODE = process.env.NODE_ENV !== "production";
 const DEV_TEST_USER_ID = process.env.DEV_TEST_USER_ID?.trim() || "";
 
 type BookAssetType = "pdf" | "epub";
-type CreateBookStatus = "draft" | "under_review" | "approved" | "published";
+type CreateBookStatus = "draft" | "under_review";
 type PreviewMode = "first_pages" | "manual" | "disabled";
+type PreviewStatus = "disabled" | "pending" | "unsupported";
 type RecordId = string | number;
 
 type EffectiveUser = {
@@ -36,15 +39,6 @@ type EffectiveUser = {
     full_name?: string;
     name?: string;
   } | null;
-};
-
-type AuthorProfileRow = {
-  id: string;
-  user_id: string | null;
-  slug: string | null;
-  pen_name: string | null;
-  display_name: string | null;
-  email: string | null;
 };
 
 type RollbackState = {
@@ -61,8 +55,8 @@ type UploadBookForm = {
 
   descriptionShortInput: string | null;
   descriptionInput: string;
-  introductionInput: string;
-  chapterOneInput: string;
+  introductionInput: string | null;
+  chapterOneInput: string | null;
   sampleUrlInput: string | null;
 
   primaryNiche: string;
@@ -167,11 +161,11 @@ function parseNullableNumberField(
   return parsed;
 }
 
-function parsePositivePrice(value: string): number | null {
+function parseRequiredPrice(value: string): number {
   const parsed = Number(value);
 
   if (!Number.isFinite(parsed) || parsed < 0) {
-    return null;
+    throw new Error("El precio no es válido");
   }
 
   return parsed;
@@ -248,26 +242,34 @@ function getMimeExtension(file: File, fallback: string): string {
   return fallback;
 }
 
-function getBookAssetType(fileName: string): BookAssetType {
-  return getExtension(fileName) === "epub" ? "epub" : "pdf";
+function getBookAssetType(file: File): BookAssetType {
+  const ext = getExtension(file.name);
+
+  if (ext === "epub" || file.type === "application/epub+zip") {
+    return "epub";
+  }
+
+  return "pdf";
 }
 
 function normalizeEditionFormat(format: string) {
   const value = format.trim().toLowerCase();
 
   if (value === "audiobook") return "audiobook";
+
   if (value === "paperback" || value === "hardcover" || value === "print") {
     return "print";
   }
 
   if (value === "kindle_external") return "kindle_external";
+  if (value === "bundle") return "bundle";
 
   return "ebook";
 }
 
 function getDescriptionShort(params: {
   explicitShort: string | null;
-  descriptionLong: string | null;
+  descriptionLong: string;
 }): string | null {
   const explicit = params.explicitShort?.trim();
 
@@ -275,7 +277,7 @@ function getDescriptionShort(params: {
     return explicit.slice(0, SHORT_DESCRIPTION_LIMIT);
   }
 
-  const description = params.descriptionLong?.trim();
+  const description = params.descriptionLong.trim();
 
   if (!description) {
     return null;
@@ -285,15 +287,37 @@ function getDescriptionShort(params: {
 }
 
 function isValidImageFile(file: File): boolean {
-  return !file.type || file.type.startsWith("image/");
+  const ext = getExtension(file.name);
+
+  const hasValidMime = !file.type || file.type.startsWith("image/");
+  const hasValidExtension = ALLOWED_IMAGE_EXTENSIONS.has(ext);
+
+  return hasValidMime && hasValidExtension;
 }
 
-function isAllowedBookExtension(fileName: string): boolean {
-  return ALLOWED_BOOK_EXTENSIONS.has(getExtension(fileName));
+function isAllowedBookFile(file: File): boolean {
+  const ext = getExtension(file.name);
+
+  const hasValidExtension = ALLOWED_BOOK_EXTENSIONS.has(ext);
+  const hasValidMime =
+    !file.type ||
+    file.type === "application/pdf" ||
+    file.type === "application/epub+zip" ||
+    file.type === "application/octet-stream";
+
+  return hasValidExtension && hasValidMime;
 }
 
 function resolveErrorStatus(message: string): number {
   if (message === "No autorizado") return 401;
+
+  if (
+    message.includes("autor") ||
+    message.includes("permiso") ||
+    message.includes("publicar")
+  ) {
+    return 403;
+  }
 
   const isBadRequest =
     message.includes("obligatorio") ||
@@ -303,22 +327,10 @@ function resolveErrorStatus(message: string): number {
     message.includes("seleccionar") ||
     message.includes("mínimo") ||
     message.includes("no existe") ||
-    message.includes("no es válido");
+    message.includes("no es válido") ||
+    message.includes("no debe superar");
 
   return isBadRequest ? 400 : 500;
-}
-
-function getUserDisplayName(user: EffectiveUser) {
-  return (
-    user.user_metadata?.full_name?.trim() ||
-    user.user_metadata?.name?.trim() ||
-    user.email?.split("@")[0]?.trim() ||
-    "Autor"
-  );
-}
-
-function getSafeEmail(user: EffectiveUser) {
-  return user.email?.trim() || `${user.id}@no-email.local`;
 }
 
 function getPublicUrl(bucket: string, storagePath: string): string {
@@ -354,7 +366,7 @@ async function insertWithColumnFallback<T = unknown>(params: {
   maxRetries?: number;
 }): Promise<T> {
   let payload = { ...params.payload };
-  const maxRetries = params.maxRetries ?? 12;
+  const maxRetries = params.maxRetries ?? 40;
 
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     const query = supabaseAdmin.from(params.table).insert(payload);
@@ -379,44 +391,6 @@ async function insertWithColumnFallback<T = unknown>(params: {
   }
 
   throw new Error(`No se pudo insertar en ${params.table}`);
-}
-
-async function updateWithColumnFallback(params: {
-  table: string;
-  patch: Record<string, unknown>;
-  matchColumn: string;
-  matchValue: string;
-  maxRetries?: number;
-}): Promise<void> {
-  let patch = { ...params.patch };
-  const maxRetries = params.maxRetries ?? 8;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-    const { error } = await supabaseAdmin
-      .from(params.table)
-      .update(patch)
-      .eq(params.matchColumn, params.matchValue);
-
-    if (!error) {
-      return;
-    }
-
-    const missingColumn = getMissingColumnFromError(error.message);
-
-    if (!missingColumn || !(missingColumn in patch)) {
-      throw new Error(`Error actualizando ${params.table}: ${error.message}`);
-    }
-
-    const nextPatch = { ...patch };
-    delete nextPatch[missingColumn];
-    patch = nextPatch;
-
-    if (Object.keys(patch).length === 0) {
-      return;
-    }
-  }
-
-  throw new Error(`No se pudo actualizar ${params.table}`);
 }
 
 async function getEffectiveUser(): Promise<EffectiveUser> {
@@ -447,157 +421,6 @@ async function getEffectiveUser(): Promise<EffectiveUser> {
   }
 
   return effectiveUser;
-}
-
-async function generateUniqueAuthorSlug(
-  displayName: string,
-  excludeAuthorId?: string
-) {
-  const baseSlug = slugify(displayName) || `autor-${randomUUID().slice(0, 8)}`;
-
-  let slug = baseSlug;
-  let counter = 1;
-
-  while (true) {
-    let query = supabaseAdmin
-      .from("author_profiles")
-      .select("id")
-      .eq("slug", slug);
-
-    if (excludeAuthorId) {
-      query = query.neq("id", excludeAuthorId);
-    }
-
-    const { data, error } = await query.limit(1);
-
-    if (error) {
-      throw new Error(`Error validando slug de autor: ${error.message}`);
-    }
-
-    if (!data || data.length === 0) {
-      return slug;
-    }
-
-    slug = `${baseSlug}-${counter}`;
-    counter += 1;
-  }
-}
-
-async function findExistingAuthorProfile(userId: string) {
-  const byId = await supabaseAdmin
-    .from("author_profiles")
-    .select("id, user_id, slug, pen_name, display_name, email")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (byId.error) {
-    throw new Error(`Error buscando perfil de autor: ${byId.error.message}`);
-  }
-
-  if (byId.data) {
-    return byId.data as AuthorProfileRow;
-  }
-
-  const byUserId = await supabaseAdmin
-    .from("author_profiles")
-    .select("id, user_id, slug, pen_name, display_name, email")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (byUserId.error) {
-    throw new Error(`Error buscando perfil de autor: ${byUserId.error.message}`);
-  }
-
-  return (byUserId.data as AuthorProfileRow | null) ?? null;
-}
-
-async function repairExistingAuthorProfile(params: {
-  author: AuthorProfileRow;
-  user: EffectiveUser;
-  displayName: string;
-  safeEmail: string;
-}) {
-  const { author, user, displayName, safeEmail } = params;
-
-  const updates: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
-  };
-
-  if (!author.user_id) updates.user_id = user.id;
-  if (!author.display_name) updates.display_name = displayName;
-  if (!author.pen_name) updates.pen_name = displayName;
-  if (!author.email) updates.email = safeEmail;
-
-  if (!author.slug) {
-    updates.slug = await generateUniqueAuthorSlug(displayName, author.id);
-  }
-
-  if (Object.keys(updates).length === 1 && "updated_at" in updates) {
-    return;
-  }
-
-  await updateWithColumnFallback({
-    table: "author_profiles",
-    patch: updates,
-    matchColumn: "id",
-    matchValue: author.id,
-  });
-}
-
-async function getOrCreateAuthorProfile(user: EffectiveUser): Promise<string> {
-  const displayName = getUserDisplayName(user);
-  const safeEmail = getSafeEmail(user);
-
-  const existingAuthor = await findExistingAuthorProfile(user.id);
-
-  if (existingAuthor?.id) {
-    await repairExistingAuthorProfile({
-      author: existingAuthor,
-      user,
-      displayName,
-      safeEmail,
-    });
-
-    return existingAuthor.id;
-  }
-
-  const authorSlug = await generateUniqueAuthorSlug(displayName, user.id);
-  const now = new Date().toISOString();
-
-  const payload: Record<string, unknown> = {
-    id: user.id,
-    user_id: user.id,
-    display_name: displayName,
-    pen_name: displayName,
-    slug: authorSlug,
-    email: safeEmail,
-    created_at: now,
-    updated_at: now,
-  };
-
-  try {
-    const insertedAuthor = await insertWithColumnFallback<{ id: string }>({
-      table: "author_profiles",
-      payload,
-      select: "id",
-    });
-
-    return insertedAuthor.id;
-  } catch (error) {
-    const message = getErrorMessage(error);
-    const isDuplicate =
-      message.includes("23505") || message.toLowerCase().includes("duplicate");
-
-    if (isDuplicate) {
-      const recoveredAuthor = await findExistingAuthorProfile(user.id);
-
-      if (recoveredAuthor?.id) {
-        return recoveredAuthor.id;
-      }
-    }
-
-    throw error;
-  }
 }
 
 async function generateUniqueSlug(title: string): Promise<string> {
@@ -695,8 +518,11 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
     "description_short"
   );
   const descriptionInput = readTextField(formData, "description");
-  const introductionInput = readTextField(formData, "introduction");
-  const chapterOneInput = readTextField(formData, "chapter_one_excerpt");
+  const introductionInput = readNullableTextField(formData, "introduction");
+  const chapterOneInput = readNullableTextField(
+    formData,
+    "chapter_one_excerpt"
+  );
   const sampleUrlInput = readNullableTextField(formData, "sample_url");
 
   const primaryNiche = readTextField(formData, "primary_niche");
@@ -724,7 +550,7 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
     ? (rawStatus as CreateBookStatus)
     : "under_review";
 
-  const price = parsePositivePrice(readTextField(formData, "price"));
+  const price = parseRequiredPrice(readTextField(formData, "price"));
   const currency = readTextField(formData, "currency") || "DOP";
   const compareAtPrice = parseNullableNumberField(formData, "compare_at_price");
   const pageCount = parseNullableNumberField(formData, "page_count");
@@ -773,16 +599,31 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
   if (!cover) throw new Error("La portada es obligatoria");
   if (!bookFile) throw new Error("El archivo del libro es obligatorio");
 
-  if (!isValidImageFile(cover)) {
-    throw new Error("La portada debe ser una imagen válida");
+  if (cover.size > MAX_COVER_SIZE_BYTES) {
+    throw new Error(`La portada no debe superar ${MAX_COVER_SIZE_MB} MB`);
   }
 
-  if (!isAllowedBookExtension(bookFile.name)) {
+  if (bookFile.size > MAX_BOOK_SIZE_BYTES) {
+    throw new Error(`El archivo del libro no debe superar ${MAX_BOOK_SIZE_MB} MB`);
+  }
+
+  if (!isValidImageFile(cover)) {
+    throw new Error("La portada debe ser JPG, PNG o WebP");
+  }
+
+  if (!isAllowedBookFile(bookFile)) {
     throw new Error("El archivo del libro debe ser PDF o EPUB");
   }
 
-  if (price === null) {
-    throw new Error("El precio no es válido");
+  if (pageCount !== null && (!Number.isInteger(pageCount) || pageCount < 1)) {
+    throw new Error("El número de páginas no es válido");
+  }
+
+  if (
+    affiliateCommissionPercentage !== null &&
+    affiliateCommissionPercentage > 100
+  ) {
+    throw new Error("La comisión de afiliado no puede superar 100%");
   }
 
   return {
@@ -839,9 +680,10 @@ async function uploadBookStorage(params: {
   slug: string;
   form: UploadBookForm;
 }): Promise<StorageUploadResult> {
+  const bookAssetType = getBookAssetType(params.form.bookFile);
+
   const coverExt = getMimeExtension(params.form.cover, "jpg");
-  const bookExt = getMimeExtension(params.form.bookFile, "pdf");
-  const bookAssetType = getBookAssetType(params.form.bookFile.name);
+  const bookExt = getMimeExtension(params.form.bookFile, bookAssetType);
 
   const coverPath = `covers/${params.slug}-${randomUUID()}.${coverExt}`;
   const filePath = `books/${params.slug}-${randomUUID()}.${bookExt}`;
@@ -867,19 +709,53 @@ async function uploadBookStorage(params: {
   };
 }
 
+function getPreviewStatus(params: {
+  previewMode: PreviewMode;
+  bookAssetType: BookAssetType;
+}): {
+  status: PreviewStatus;
+  error: string | null;
+} {
+  if (params.previewMode === "disabled") {
+    return {
+      status: "disabled",
+      error: "La muestra visual está desactivada para este libro.",
+    };
+  }
+
+  if (params.bookAssetType === "epub") {
+    return {
+      status: "unsupported",
+      error:
+        "El EPUB fue guardado correctamente, pero la muestra visual tipo páginas requiere PDF.",
+    };
+  }
+
+  return {
+    status: "pending",
+    error: null,
+  };
+}
+
 async function createBookRecord(params: {
   ownerUserId: string;
   authorId: string;
   form: UploadBookForm;
   slug: string;
   coverUrl: string;
+  bookAssetType: BookAssetType;
 }) {
   const now = new Date().toISOString();
-  const previewDisabled = params.form.previewMode === "disabled";
+
+  const preview = getPreviewStatus({
+    previewMode: params.form.previewMode,
+    bookAssetType: params.bookAssetType,
+  });
 
   const payload: Record<string, unknown> = {
     owner_user_id: params.ownerUserId,
     author_id: params.authorId,
+
     title: params.form.title,
     subtitle: params.form.subtitle,
     publisher_name: params.form.publisherName,
@@ -893,8 +769,8 @@ async function createBookRecord(params: {
       descriptionLong: params.form.descriptionInput,
     }),
     description_long: params.form.descriptionInput,
-    introduction: params.form.introductionInput || null,
-    chapter_one_excerpt: params.form.chapterOneInput || null,
+    introduction: params.form.introductionInput,
+    chapter_one_excerpt: params.form.chapterOneInput,
     sample_url: params.form.sampleUrlInput,
 
     primary_niche: params.form.primaryNiche,
@@ -917,12 +793,11 @@ async function createBookRecord(params: {
     preview_include_cover: params.form.previewIncludeCover,
     preview_layout: params.form.previewLayout,
     preview_progress_enabled: params.form.previewProgressEnabled,
-    preview_status: previewDisabled ? "disabled" : "pending",
-    preview_error: previewDisabled
-      ? "La muestra visual está desactivada para este libro."
-      : null,
+    preview_status: preview.status,
+    preview_error: preview.error,
     preview_generated_at: null,
 
+    created_at: now,
     updated_at: now,
   };
 
@@ -1005,15 +880,22 @@ async function createAssetRecords(params: {
 function buildPreviewCommand(params: {
   slug: string;
   form: UploadBookForm;
+  bookAssetType: BookAssetType;
 }): string | null {
   if (params.form.previewMode === "disabled") {
     return null;
   }
 
-  return `npm run preview:book -- --slug ${params.slug} --pages ${Math.min(
+  if (params.bookAssetType !== "pdf") {
+    return null;
+  }
+
+  const pages = Math.min(
     params.form.previewPageCount || DEFAULT_PREVIEW_PAGE_COUNT,
     MAX_PREVIEW_PAGE_COUNT
-  )} --scale 5200`;
+  );
+
+  return `npm run preview:book -- --slug ${params.slug} --pages ${pages} --scale 5200`;
 }
 
 export async function POST(request: Request) {
@@ -1027,13 +909,14 @@ export async function POST(request: Request) {
   try {
     const effectiveUser = await getEffectiveUser();
 
-const authorAccess = await getAuthorPublishingAccess(effectiveUser.id);
+    const authorAccess = await getAuthorPublishingAccess(effectiveUser.id);
 
-if (!authorAccess.allowed || !authorAccess.authorId) {
-  return jsonError(authorAccess.message, 403);
-}
-
-const authorId = authorAccess.authorId;
+    if (!authorAccess.allowed || !authorAccess.authorId) {
+      return jsonError(
+        authorAccess.message || "No tienes permiso para publicar libros.",
+        403
+      );
+    }
 
     const formData = await request.formData();
     const form = parseAndValidateForm(formData);
@@ -1050,10 +933,11 @@ const authorId = authorAccess.authorId;
 
     const insertedBook = await createBookRecord({
       ownerUserId: effectiveUser.id,
-      authorId,
+      authorId: authorAccess.authorId,
       form,
       slug,
       coverUrl: storage.coverUrl,
+      bookAssetType: storage.bookAssetType,
     });
 
     const insertedBookId = (insertedBook as { id: RecordId }).id;
@@ -1080,14 +964,20 @@ const authorId = authorAccess.authorId;
     const previewCommand = buildPreviewCommand({
       slug,
       form,
+      bookAssetType: storage.bookAssetType,
+    });
+
+    const previewStatus = getPreviewStatus({
+      previewMode: form.previewMode,
+      bookAssetType: storage.bookAssetType,
     });
 
     return Response.json(
       {
         message:
           form.status === "draft"
-            ? "Libro guardado como borrador"
-            : "Libro guardado correctamente",
+            ? "Libro guardado como borrador."
+            : "Libro enviado a evaluación correctamente.",
         book: insertedBook,
         edition: insertedEdition,
         storage: {
@@ -1097,9 +987,11 @@ const authorId = authorAccess.authorId;
           file_bucket: FILE_BUCKET,
           file_path: storage.filePath,
           file_is_public: false,
+          book_asset_type: storage.bookAssetType,
         },
         preview: {
-          status: form.previewMode === "disabled" ? "disabled" : "pending",
+          status: previewStatus.status,
+          error: previewStatus.error,
           mode: form.previewMode,
           page_count: form.previewPageCount,
           include_cover: form.previewIncludeCover,

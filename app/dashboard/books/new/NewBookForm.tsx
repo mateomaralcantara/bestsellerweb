@@ -24,11 +24,16 @@ type CreateBookResponse = {
     slug?: string;
     title?: string;
   };
+  preview?: {
+    status?: string;
+    error?: string | null;
+    command?: string | null;
+  };
 };
 
 type DraftValue = string | boolean;
 
-const DRAFT_KEY = "dashboard:new-book:draft:v2";
+const DRAFT_KEY = "dashboard:new-book:draft:v3";
 const PREVIEW_PAGE_COUNT = 17;
 const MAX_COVER_SIZE_MB = 10;
 const MAX_BOOK_SIZE_MB = 100;
@@ -42,12 +47,19 @@ const NICHES = [
   "Salud y bienestar",
   "Educación",
   "Tecnología",
+  "Inteligencia artificial",
   "Ficción",
   "Romance",
   "Misterio / Thriller",
   "Biografía / Memorias",
   "Infantil / Juvenil",
   "Cristiano / Fe",
+  "Historia",
+  "Política y sociedad",
+  "Periodismo",
+  "Psicología",
+  "Derecho",
+  "Migración",
   "Académico / Profesional",
 ];
 
@@ -59,6 +71,8 @@ const CATEGORIES_BY_NICHE: Record<string, string[]> = {
     "Gestión empresarial",
     "Marca personal",
     "Emprendimiento digital",
+    "Negocios familiares",
+    "Estrategia empresarial",
   ],
   "Finanzas personales": [
     "Inversión",
@@ -66,6 +80,9 @@ const CATEGORIES_BY_NICHE: Record<string, string[]> = {
     "Crédito",
     "Educación financiera",
     "Libertad financiera",
+    "Presupuesto personal",
+    "Deudas",
+    "Riqueza",
   ],
   "Marketing y ventas": [
     "Ventas",
@@ -74,6 +91,8 @@ const CATEGORIES_BY_NICHE: Record<string, string[]> = {
     "Redes sociales",
     "Embudo de ventas",
     "Marca personal",
+    "Marketing de contenidos",
+    "Ecommerce",
   ],
   "Desarrollo personal": [
     "Hábitos",
@@ -82,6 +101,8 @@ const CATEGORIES_BY_NICHE: Record<string, string[]> = {
     "Disciplina",
     "Autoayuda",
     "Propósito",
+    "Productividad personal",
+    "Superación",
   ],
   Espiritualidad: [
     "Meditación",
@@ -89,6 +110,8 @@ const CATEGORIES_BY_NICHE: Record<string, string[]> = {
     "Crecimiento espiritual",
     "Reflexiones",
     "Fe práctica",
+    "Oración",
+    "Vida interior",
   ],
   "Salud y bienestar": [
     "Nutrición",
@@ -96,6 +119,8 @@ const CATEGORIES_BY_NICHE: Record<string, string[]> = {
     "Salud mental",
     "Bienestar integral",
     "Hábitos saludables",
+    "Sueño",
+    "Estrés",
   ],
   Educación: [
     "Métodos de estudio",
@@ -103,13 +128,26 @@ const CATEGORIES_BY_NICHE: Record<string, string[]> = {
     "Aprendizaje",
     "Guías prácticas",
     "Formación profesional",
+    "Educación digital",
+    "Pedagogía",
   ],
   Tecnología: [
-    "Inteligencia artificial",
     "Programación",
     "Ciberseguridad",
     "Software",
     "Transformación digital",
+    "Automatización",
+    "SaaS",
+    "Apps",
+  ],
+  "Inteligencia artificial": [
+    "IA generativa",
+    "Prompt engineering",
+    "Automatización con IA",
+    "Ética de la IA",
+    "IA y sociedad",
+    "IA para negocios",
+    "IA educativa",
   ],
   Ficción: [
     "Drama",
@@ -117,6 +155,8 @@ const CATEGORIES_BY_NICHE: Record<string, string[]> = {
     "Ciencia ficción",
     "Fantasía",
     "Realismo contemporáneo",
+    "Cuento",
+    "Novela corta",
   ],
   Romance: [
     "Romance contemporáneo",
@@ -124,6 +164,7 @@ const CATEGORIES_BY_NICHE: Record<string, string[]> = {
     "Drama romántico",
     "Comedia romántica",
     "Romance juvenil",
+    "Romance espiritual",
   ],
   "Misterio / Thriller": [
     "Suspenso",
@@ -131,6 +172,7 @@ const CATEGORIES_BY_NICHE: Record<string, string[]> = {
     "Thriller psicológico",
     "Detectives",
     "Misterio paranormal",
+    "Conspiración",
   ],
   "Biografía / Memorias": [
     "Historia personal",
@@ -138,6 +180,7 @@ const CATEGORIES_BY_NICHE: Record<string, string[]> = {
     "Testimonio",
     "Carrera profesional",
     "Legado familiar",
+    "Memorias políticas",
   ],
   "Infantil / Juvenil": [
     "Cuentos infantiles",
@@ -145,6 +188,7 @@ const CATEGORIES_BY_NICHE: Record<string, string[]> = {
     "Educativo infantil",
     "Valores",
     "Fantasía juvenil",
+    "Lectura temprana",
   ],
   "Cristiano / Fe": [
     "Devocional",
@@ -152,13 +196,65 @@ const CATEGORIES_BY_NICHE: Record<string, string[]> = {
     "Testimonio",
     "Familia y fe",
     "Estudio bíblico",
+    "Liderazgo cristiano",
+    "Consejería cristiana",
+  ],
+  Historia: [
+    "Historia dominicana",
+    "Historia mundial",
+    "Historia política",
+    "Historia social",
+    "Memoria histórica",
+    "Biografías históricas",
+  ],
+  "Política y sociedad": [
+    "Geopolítica",
+    "Opinión política",
+    "Ensayo social",
+    "Gobierno",
+    "Campañas electorales",
+    "Liderazgo público",
+  ],
+  Periodismo: [
+    "Historia del periodismo",
+    "Libertad de expresión",
+    "Crónica",
+    "Investigación periodística",
+    "Comunicación",
+    "Medios digitales",
+  ],
+  Psicología: [
+    "Conducta humana",
+    "Relaciones",
+    "Trauma",
+    "Sueño",
+    "Autoestima",
+    "Psicología práctica",
+  ],
+  Derecho: [
+    "Derecho migratorio",
+    "Derecho civil",
+    "Derecho laboral",
+    "Derecho empresarial",
+    "Guías legales",
+    "Trámites",
+  ],
+  Migración: [
+    "Visas",
+    "Residencia",
+    "Ciudadanía",
+    "Asilo",
+    "Reunificación familiar",
+    "Guías migratorias",
   ],
   "Académico / Profesional": [
     "Manual técnico",
     "Investigación",
-    "Derecho",
-    "Medicina",
     "Administración",
+    "Medicina",
+    "Negocios",
+    "Tesis",
+    "Formación profesional",
   ],
 };
 
@@ -239,9 +335,36 @@ function sizeInMb(file: File) {
   return file.size / 1024 / 1024;
 }
 
+function getExtension(file: File) {
+  return file.name.split(".").pop()?.toLowerCase() || "";
+}
+
 function hasAllowedExtension(file: File, extensions: string[]) {
-  const name = file.name.toLowerCase();
-  return extensions.some((extension) => name.endsWith(extension));
+  const extension = `.${getExtension(file)}`;
+  return extensions.includes(extension);
+}
+
+function isValidImageFile(file: File) {
+  const validType = !file.type || file.type.startsWith("image/");
+  const validExtension = hasAllowedExtension(file, [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+  ]);
+
+  return validType && validExtension;
+}
+
+function isPdfFile(file: File) {
+  return file.type === "application/pdf" || hasAllowedExtension(file, [".pdf"]);
+}
+
+function isEpubFile(file: File) {
+  return (
+    file.type === "application/epub+zip" ||
+    hasAllowedExtension(file, [".epub"])
+  );
 }
 
 function validateFiles(formData: FormData) {
@@ -252,8 +375,8 @@ function validateFiles(formData: FormData) {
     return "La portada es obligatoria.";
   }
 
-  if (!cover.type.startsWith("image/")) {
-    return "La portada debe ser una imagen JPG, PNG o WebP.";
+  if (!isValidImageFile(cover)) {
+    return "La portada debe ser JPG, PNG o WebP.";
   }
 
   if (sizeInMb(cover) > MAX_COVER_SIZE_MB) {
@@ -264,12 +387,7 @@ function validateFiles(formData: FormData) {
     return "El archivo del libro es obligatorio.";
   }
 
-  const validBookFile =
-    bookFile.type === "application/pdf" ||
-    bookFile.type === "application/epub+zip" ||
-    hasAllowedExtension(bookFile, [".pdf", ".epub"]);
-
-  if (!validBookFile) {
+  if (!isPdfFile(bookFile) && !isEpubFile(bookFile)) {
     return "El archivo del libro debe ser PDF o EPUB.";
   }
 
@@ -384,13 +502,22 @@ export default function NewBookForm() {
     }
 
     draftTimerRef.current = setTimeout(() => {
-      const draft = collectDraft(form);
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      try {
+        const draft = collectDraft(form);
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      } catch {
+        // localStorage puede fallar en modo privado o por cuota llena.
+      }
     }, 350);
   }, []);
 
   const clearDraft = useCallback(() => {
-    localStorage.removeItem(DRAFT_KEY);
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      // Nada grave.
+    }
+
     setDraftRestored(false);
   }, []);
 
@@ -446,6 +573,10 @@ export default function NewBookForm() {
     const price = parsePrice(readText(formData, "price"));
     const compareAtPrice = readText(formData, "compare_at_price");
     const pageCount = readText(formData, "page_count");
+    const affiliateCommission = readText(
+      formData,
+      "affiliate_commission_percentage"
+    );
 
     if (!title) return "El título es obligatorio.";
     if (!description) return "La descripción comercial es obligatoria.";
@@ -472,6 +603,14 @@ export default function NewBookForm() {
       }
     }
 
+    if (affiliateCommission) {
+      const commission = Number(affiliateCommission);
+
+      if (!Number.isFinite(commission) || commission < 0 || commission > 100) {
+        return "La comisión de afiliado debe estar entre 0 y 100.";
+      }
+    }
+
     return validateFiles(formData);
   }
 
@@ -493,7 +632,10 @@ export default function NewBookForm() {
     }
 
     setIsSubmitting(true);
-    setStatus({ type: "idle", message: "" });
+    setStatus({
+      type: "info",
+      message: "Guardando libro, portada, archivo y metadata...",
+    });
 
     try {
       const response = await fetch("/api/books", {
@@ -527,11 +669,16 @@ export default function NewBookForm() {
 
       clearDraft();
 
+      const previewNotice =
+        data.preview?.status === "unsupported" && data.preview.error
+          ? ` ${data.preview.error}`
+          : "";
+
       setStatus({
         type: "success",
         message:
           data.message ||
-          "Libro creado correctamente. La muestra visual se genera desde el PDF en el servidor.",
+          `Libro creado correctamente.${previewNotice}`,
       });
 
       form.reset();
@@ -565,16 +712,17 @@ export default function NewBookForm() {
             </h1>
 
             <p className="max-w-3xl text-sm leading-6 text-slate-600">
-              Crea la ficha tipo Amazon/KDP, sube portada y PDF. La muestra se
-              genera automática con portada + primeras {PREVIEW_PAGE_COUNT}{" "}
-              páginas del libro.
+              Crea la ficha tipo Amazon/KDP, sube portada y archivo. La muestra
+              automática funciona mejor con PDF porque el EPUB no tiene páginas
+              fijas.
             </p>
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 text-sm shadow-sm">
             <p className="font-bold text-slate-900">Vista previa automática</p>
             <p className="mt-1 text-slate-600">
-              Doble página horizontal, barra de progreso y PDF protegido.
+              Portada + primeras {PREVIEW_PAGE_COUNT} páginas cuando el archivo
+              sea PDF.
             </p>
           </div>
         </div>
@@ -583,9 +731,8 @@ export default function NewBookForm() {
       {draftRestored ? (
         <div className="flex flex-col gap-3 rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 md:flex-row md:items-center md:justify-between">
           <p>
-            Rescaté un borrador local de este formulario. Los archivos no se
-            pueden restaurar por seguridad del navegador; vuelve a
-            seleccionarlos.
+            Rescaté un borrador local. Los archivos no se restauran por
+            seguridad del navegador; vuelve a seleccionarlos.
           </p>
 
           <button
@@ -683,8 +830,8 @@ export default function NewBookForm() {
                 ))}
               </select>
               <FieldHint>
-                Los libros no se publican directo. Primero quedan como borrador
-                o en evaluación.
+                Por seguridad, los libros entran como borrador o evaluación. No
+                se publican directo desde este formulario.
               </FieldHint>
             </label>
           </div>
@@ -725,7 +872,9 @@ export default function NewBookForm() {
         </section>
 
         <section className={sectionClassName}>
-          <h2 className={sectionTitleClassName}>Categoría y descubrimiento</h2>
+          <h2 className={sectionTitleClassName}>
+            Categoría y descubrimiento
+          </h2>
 
           <div className="grid gap-5 md:grid-cols-2">
             <label className={labelClassName}>
@@ -749,6 +898,9 @@ export default function NewBookForm() {
                   </option>
                 ))}
               </select>
+              <FieldHint>
+                Este campo alimenta la categoría lateral grande del catálogo.
+              </FieldHint>
             </label>
 
             <label className={labelClassName}>
@@ -773,6 +925,9 @@ export default function NewBookForm() {
                   </option>
                 ))}
               </select>
+              <FieldHint>
+                Este es el campo que conecta el libro con el filtro tipo Amazon.
+              </FieldHint>
             </label>
           </div>
 
@@ -887,13 +1042,13 @@ export default function NewBookForm() {
             <PreviewInfoCard
               title="Modo"
               value="Automática"
-              text="No se pega introducción ni capítulo manual."
+              text="Se genera desde el archivo subido."
             />
 
             <PreviewInfoCard
               title="Páginas"
               value={`Portada + ${PREVIEW_PAGE_COUNT}`}
-              text="Se toman desde el PDF en orden real."
+              text="Solo cuando el archivo sea PDF."
             />
 
             <PreviewInfoCard
@@ -904,15 +1059,15 @@ export default function NewBookForm() {
 
             <PreviewInfoCard
               title="Seguridad"
-              value="PDF protegido"
-              text="El lector ve imágenes, no el archivo completo."
+              value="Archivo privado"
+              text="El PDF completo no queda público."
             />
           </div>
 
           <div className="mt-4 rounded-3xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-900">
-            La muestra se genera después de subir el archivo. Si el API todavía
-            no convierte PDF a imágenes, guarda estos campos y procesa la
-            muestra en backend con la tabla <strong>book_preview_pages</strong>.
+            Para fragmento visual tipo Amazon, sube PDF. El EPUB se acepta para
+            guardar el libro, pero no genera páginas fijas porque es formato
+            adaptable.
           </div>
         </section>
 
@@ -1026,7 +1181,7 @@ export default function NewBookForm() {
             <CheckboxCard
               name="download_allowed"
               title="Permitir descarga"
-              text="Úsalo solo si quieres entregar el PDF."
+              text="Úsalo solo si quieres entregar el PDF/EPUB."
               disabled={isSubmitting}
             />
           </div>
@@ -1116,8 +1271,8 @@ export default function NewBookForm() {
                 className={inputClassName}
               />
               <FieldHint>
-                PDF o EPUB. Máximo {MAX_BOOK_SIZE_MB} MB. El archivo completo
-                debe quedar protegido, no público.
+                PDF o EPUB. Máximo {MAX_BOOK_SIZE_MB} MB. PDF recomendado para
+                generar fragmento visual.
               </FieldHint>
             </label>
           </div>
@@ -1152,7 +1307,7 @@ export default function NewBookForm() {
                 className="rounded-2xl bg-black px-6 py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting
-                  ? "Guardando y generando..."
+                  ? "Guardando libro..."
                   : "Guardar / enviar libro"}
               </button>
             </div>
@@ -1203,6 +1358,7 @@ function CheckboxCard({
         disabled={disabled}
         className="mt-1 h-4 w-4 rounded border-slate-300"
       />
+
       <span>
         <strong className="block text-slate-900">{title}</strong>
         {text}
