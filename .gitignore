@@ -21,3 +21,10 @@ pnpm-debug.log*
 .vercel
 
 datos.txt
+codigos.txt
+.tmp-preview/
+_backups_upload_fix/
+_repair_api_route_backups/
+reports/
+preview-test.epub
+*.bak

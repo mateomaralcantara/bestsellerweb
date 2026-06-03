@@ -33,8 +33,7 @@ type CreateBookResponse = {
 
 type DraftValue = string | boolean;
 
-const DRAFT_KEY = "dashboard:new-book:draft:v3";
-const PREVIEW_PAGE_COUNT = 17;
+const DRAFT_KEY = "dashboard:new-book:draft:v4";
 const MAX_COVER_SIZE_MB = 10;
 const MAX_BOOK_SIZE_MB = 100;
 
@@ -258,14 +257,6 @@ const CATEGORIES_BY_NICHE: Record<string, string[]> = {
   ],
 };
 
-const BOOK_FORMATS = [
-  { value: "ebook", label: "Ebook" },
-  { value: "paperback", label: "Impreso tapa blanda" },
-  { value: "hardcover", label: "Impreso tapa dura" },
-  { value: "audiobook", label: "Audiolibro" },
-  { value: "bundle", label: "Bundle / paquete" },
-];
-
 const INITIAL_STATUSES = [
   { value: "under_review", label: "Enviar a evaluación" },
   { value: "draft", label: "Guardar como borrador" },
@@ -356,20 +347,24 @@ function isValidImageFile(file: File) {
   return validType && validExtension;
 }
 
-function isPdfFile(file: File) {
-  return file.type === "application/pdf" || hasAllowedExtension(file, [".pdf"]);
-}
 
-function isEpubFile(file: File) {
+function isPdfFile(file: FormDataEntryValue | null) {
+  if (!(file instanceof File)) {
+    return false;
+  }
+
+  const fileName = file.name.toLowerCase();
+
   return (
-    file.type === "application/epub+zip" ||
-    hasAllowedExtension(file, [".epub"])
+    file.type === "application/pdf" ||
+    fileName.endsWith(".pdf")
   );
 }
 
 function validateFiles(formData: FormData) {
   const cover = formData.get("cover");
-  const bookFile = formData.get("book_file");
+  const manuscriptPdf = formData.get("manuscript_pdf");
+  // Preview automático: se genera desde el PDF principal.
 
   if (!isRealFile(cover)) {
     return "La portada es obligatoria.";
@@ -383,16 +378,16 @@ function validateFiles(formData: FormData) {
     return `La portada no debe superar ${MAX_COVER_SIZE_MB} MB.`;
   }
 
-  if (!isRealFile(bookFile)) {
-    return "El archivo del libro es obligatorio.";
+  if (!isRealFile(manuscriptPdf)) {
+    return "El PDF principal es obligatorio.";
   }
 
-  if (!isPdfFile(bookFile) && !isEpubFile(bookFile)) {
-    return "El archivo del libro debe ser PDF o EPUB.";
+  if (!isPdfFile(manuscriptPdf)) {
+    return "El archivo principal debe ser PDF.";
   }
 
-  if (sizeInMb(bookFile) > MAX_BOOK_SIZE_MB) {
-    return `El archivo del libro no debe superar ${MAX_BOOK_SIZE_MB} MB.`;
+  if (sizeInMb(manuscriptPdf) > MAX_BOOK_SIZE_MB) {
+    return `El PDF principal no debe superar ${MAX_BOOK_SIZE_MB} MB.`;
   }
 
   return null;
@@ -471,6 +466,55 @@ function StatusMessage({ status }: { status: SubmitState }) {
     >
       {status.message}
     </p>
+  );
+}
+
+function PreviewInfoCard({
+  title,
+  value,
+  text,
+}: {
+  title: string;
+  value: string;
+  text: string;
+}) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+      <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+        {title}
+      </p>
+      <p className="mt-2 font-black text-slate-950">{value}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{text}</p>
+    </div>
+  );
+}
+
+function CheckboxCard({
+  name,
+  title,
+  text,
+  disabled,
+}: {
+  name: string;
+  title: string;
+  text: string;
+  disabled: boolean;
+}) {
+  return (
+    <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-medium text-slate-700">
+      <input
+        name={name}
+        type="checkbox"
+        value="true"
+        disabled={disabled}
+        className="mt-1 h-4 w-4 rounded border-slate-300"
+      />
+
+      <span>
+        <strong className="block text-slate-900">{title}</strong>
+        {text}
+      </span>
+    </label>
   );
 }
 
@@ -634,7 +678,7 @@ export default function NewBookForm() {
     setIsSubmitting(true);
     setStatus({
       type: "info",
-      message: "Guardando libro, portada, archivo y metadata...",
+      message: "Guardando portada, PDF principal y metadata...",
     });
 
     try {
@@ -669,16 +713,11 @@ export default function NewBookForm() {
 
       clearDraft();
 
-      const previewNotice =
-        data.preview?.status === "unsupported" && data.preview.error
-          ? ` ${data.preview.error}`
-          : "";
-
       setStatus({
         type: "success",
         message:
           data.message ||
-          `Libro creado correctamente.${previewNotice}`,
+          "Libro creado correctamente con PDF principal.",
       });
 
       form.reset();
@@ -708,21 +747,20 @@ export default function NewBookForm() {
         <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-2">
             <h1 className="text-3xl font-black tracking-tight text-slate-950 md:text-4xl">
-              Nuevo libro
+              Nuevo libro EPUB
             </h1>
 
             <p className="max-w-3xl text-sm leading-6 text-slate-600">
-              Crea la ficha tipo Amazon/KDP, sube portada y archivo. La muestra
-              automática funciona mejor con PDF porque el EPUB no tiene páginas
-              fijas.
+              Crea la ficha tipo Amazon/KDP, sube portada, PDF principal y EPUB
+              preview. El preview se leerá dentro de la plataforma sin entregar
+              el archivo completo.
             </p>
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 text-sm shadow-sm">
-            <p className="font-bold text-slate-900">Vista previa automática</p>
+            <p className="font-bold text-slate-900">Lectura interna EPUB</p>
             <p className="mt-1 text-slate-600">
-              Portada + primeras {PREVIEW_PAGE_COUNT} páginas cuando el archivo
-              sea PDF.
+              Un EPUB para muestra y otro EPUB privado para compradores.
             </p>
           </div>
         </div>
@@ -754,23 +792,11 @@ export default function NewBookForm() {
         className="space-y-6"
         noValidate
       >
-        <input type="hidden" name="preview_mode" value="first_pages" />
-        <input
-          type="hidden"
-          name="preview_page_count"
-          value={PREVIEW_PAGE_COUNT}
-        />
+        <input type="hidden" name="preview_mode" value="pdf_images" />
+        <input type="hidden" name="preview_page_count" value="1" />
         <input type="hidden" name="preview_include_cover" value="true" />
-        <input
-          type="hidden"
-          name="preview_layout"
-          value="two_page_horizontal"
-        />
-        <input
-          type="hidden"
-          name="preview_progress_enabled"
-          value="true"
-        />
+        <input type="hidden" name="preview_layout" value="epub_reader" />
+        <input type="hidden" name="preview_progress_enabled" value="true" />
 
         <section className={sectionClassName}>
           <h2 className={sectionTitleClassName}>Identidad del libro</h2>
@@ -830,8 +856,7 @@ export default function NewBookForm() {
                 ))}
               </select>
               <FieldHint>
-                Por seguridad, los libros entran como borrador o evaluación. No
-                se publican directo desde este formulario.
+                Por seguridad, los libros entran como borrador o evaluación.
               </FieldHint>
             </label>
           </div>
@@ -861,20 +886,14 @@ export default function NewBookForm() {
                 disabled={isSubmitting}
                 className={inputClassName}
               >
-                {BOOK_FORMATS.map((format) => (
-                  <option key={format.value} value={format.value}>
-                    {format.label}
-                  </option>
-                ))}
+                <option value="ebook">Ebook / EPUB</option>
               </select>
             </label>
           </div>
         </section>
 
         <section className={sectionClassName}>
-          <h2 className={sectionTitleClassName}>
-            Categoría y descubrimiento
-          </h2>
+          <h2 className={sectionTitleClassName}>Categoría y descubrimiento</h2>
 
           <div className="grid gap-5 md:grid-cols-2">
             <label className={labelClassName}>
@@ -898,9 +917,6 @@ export default function NewBookForm() {
                   </option>
                 ))}
               </select>
-              <FieldHint>
-                Este campo alimenta la categoría lateral grande del catálogo.
-              </FieldHint>
             </label>
 
             <label className={labelClassName}>
@@ -925,9 +941,6 @@ export default function NewBookForm() {
                   </option>
                 ))}
               </select>
-              <FieldHint>
-                Este es el campo que conecta el libro con el filtro tipo Amazon.
-              </FieldHint>
             </label>
           </div>
 
@@ -965,7 +978,7 @@ export default function NewBookForm() {
               <textarea
                 name="target_audience"
                 rows={4}
-                placeholder="Ej: emprendedores, coaches, vendedores y consultores..."
+                placeholder="Ej: emprendedores, coaches, vendedores..."
                 disabled={isSubmitting}
                 className={inputClassName}
               />
@@ -1004,7 +1017,7 @@ export default function NewBookForm() {
               name="description"
               rows={8}
               required
-              placeholder="Descripción completa tipo Amazon: problema, promesa, beneficios y para quién es."
+              placeholder="Descripción completa tipo Amazon."
               disabled={isSubmitting}
               className={inputClassName}
             />
@@ -1027,7 +1040,7 @@ export default function NewBookForm() {
               <textarea
                 name="comparable_books"
                 rows={4}
-                placeholder="Ej: Hábitos Atómicos, Padre Rico Padre Pobre..."
+                placeholder="Ej: Hábitos Atómicos..."
                 disabled={isSubmitting}
                 className={inputClassName}
               />
@@ -1036,38 +1049,37 @@ export default function NewBookForm() {
         </section>
 
         <section className={sectionClassName}>
-          <h2 className={sectionTitleClassName}>Vista previa del libro</h2>
+          <h2 className={sectionTitleClassName}>Vista previa EPUB</h2>
 
           <div className="grid gap-4 md:grid-cols-4">
             <PreviewInfoCard
-              title="Modo"
-              value="Automática"
-              text="Se genera desde el archivo subido."
+              title="Preview"
+              value="EPUB separado"
+              text="No se usa el libro completo como muestra."
             />
 
             <PreviewInfoCard
-              title="Páginas"
-              value={`Portada + ${PREVIEW_PAGE_COUNT}`}
-              text="Solo cuando el archivo sea PDF."
+              title="Completo"
+              value="EPUB privado"
+              text="Solo dueño o comprador."
             />
 
             <PreviewInfoCard
-              title="Diseño"
-              value="Doble página"
-              text="Horizontal en escritorio, una página en móvil."
+              title="Lector"
+              value="Interno"
+              text="Lectura dentro de la plataforma."
             />
 
             <PreviewInfoCard
               title="Seguridad"
-              value="Archivo privado"
-              text="El PDF completo no queda público."
+              value="Backend protegido"
+              text="El archivo no queda público."
             />
           </div>
 
           <div className="mt-4 rounded-3xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-900">
-            Para fragmento visual tipo Amazon, sube PDF. El EPUB se acepta para
-            guardar el libro, pero no genera páginas fijas porque es formato
-            adaptable.
+            Sube dos EPUB: uno completo y otro recortado para muestra. El EPUB
+            preview debe incluir solo portada, introducción y primeros capítulos.
           </div>
         </section>
 
@@ -1123,7 +1135,7 @@ export default function NewBookForm() {
 
           <div className="mt-5 grid gap-5 md:grid-cols-3">
             <label className={labelClassName}>
-              <span>Páginas</span>
+              <span>Páginas aproximadas</span>
               <input
                 name="page_count"
                 type="number"
@@ -1181,7 +1193,7 @@ export default function NewBookForm() {
             <CheckboxCard
               name="download_allowed"
               title="Permitir descarga"
-              text="Úsalo solo si quieres entregar el PDF/EPUB."
+              text="Úsalo solo si quieres entregar el EPUB."
               disabled={isSubmitting}
             />
           </div>
@@ -1211,9 +1223,6 @@ export default function NewBookForm() {
                 disabled={isSubmitting}
                 className={inputClassName}
               />
-              <FieldHint>
-                Opcional. La muestra interna se genera desde el PDF.
-              </FieldHint>
             </label>
           </div>
 
@@ -1233,7 +1242,7 @@ export default function NewBookForm() {
             <textarea
               name="marketing_angle"
               rows={4}
-              placeholder="Qué hace este libro diferente, urgente o más vendible."
+              placeholder="Qué hace este libro diferente o vendible."
               disabled={isSubmitting}
               className={inputClassName}
             />
@@ -1241,9 +1250,9 @@ export default function NewBookForm() {
         </section>
 
         <section className={sectionClassName}>
-          <h2 className={sectionTitleClassName}>Archivos</h2>
+          <h2 className={sectionTitleClassName}>Archivos EPUB</h2>
 
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid gap-5 md:grid-cols-3">
             <label className={labelClassName}>
               <span>Portada *</span>
               <input
@@ -1255,25 +1264,21 @@ export default function NewBookForm() {
                 className={inputClassName}
               />
               <FieldHint>
-                JPG, PNG o WebP. Máximo {MAX_COVER_SIZE_MB} MB. Vertical,
-                estilo portada editorial.
+                JPG, PNG o WebP. Máximo {MAX_COVER_SIZE_MB} MB.
               </FieldHint>
             </label>
 
             <label className={labelClassName}>
-              <span>Archivo del libro *</span>
+              <span>PDF principal *</span>
               <input
-                name="book_file"
+                name="manuscript_pdf"
                 type="file"
-                accept=".pdf,.epub,application/pdf,application/epub+zip"
+                accept="application/pdf,.pdf"
                 required
                 disabled={isSubmitting}
                 className={inputClassName}
               />
-              <FieldHint>
-                PDF o EPUB. Máximo {MAX_BOOK_SIZE_MB} MB. PDF recomendado para
-                generar fragmento visual.
-              </FieldHint>
+              <FieldHint>Archivo completo. Solo dueño o comprador.</FieldHint>
             </label>
           </div>
         </section>
@@ -1306,9 +1311,7 @@ export default function NewBookForm() {
                 disabled={isSubmitting}
                 className="rounded-2xl bg-black px-6 py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSubmitting
-                  ? "Guardando libro..."
-                  : "Guardar / enviar libro"}
+                {isSubmitting ? "Guardando EPUB..." : "Guardar / enviar libro"}
               </button>
             </div>
           </div>
@@ -1318,51 +1321,8 @@ export default function NewBookForm() {
   );
 }
 
-function PreviewInfoCard({
-  title,
-  value,
-  text,
-}: {
-  title: string;
-  value: string;
-  text: string;
-}) {
-  return (
-    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-      <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-        {title}
-      </p>
-      <p className="mt-2 font-black text-slate-950">{value}</p>
-      <p className="mt-1 text-xs leading-5 text-slate-500">{text}</p>
-    </div>
-  );
-}
 
-function CheckboxCard({
-  name,
-  title,
-  text,
-  disabled,
-}: {
-  name: string;
-  title: string;
-  text: string;
-  disabled: boolean;
-}) {
-  return (
-    <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-medium text-slate-700">
-      <input
-        name={name}
-        type="checkbox"
-        value="true"
-        disabled={disabled}
-        className="mt-1 h-4 w-4 rounded border-slate-300"
-      />
 
-      <span>
-        <strong className="block text-slate-900">{title}</strong>
-        {text}
-      </span>
-    </label>
-  );
-}
+
+
+

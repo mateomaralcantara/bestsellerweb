@@ -1,3 +1,7 @@
+// ============================================
+// ARCHIVO: app/catalog/[slug]/page.tsx
+// ============================================
+
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
@@ -9,6 +13,7 @@ import {
   Sparkles,
   Tags,
   Target,
+  type LucideIcon,
 } from "lucide-react";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
@@ -160,7 +165,9 @@ function getStoragePublicUrl(bucket: string, storagePath: string) {
 }
 
 function formatMoney(price: number | null, currencyCode: string | null) {
-  if (typeof price !== "number") return null;
+  if (typeof price !== "number") {
+    return null;
+  }
 
   const safeCurrency = currencyCode?.trim() || "DOP";
 
@@ -222,8 +229,13 @@ function getMainDescription(book: BookRecord) {
   const shortText = cleanText(book.description_short);
   const longText = cleanText(book.description_long);
 
-  if (!longText) return null;
-  if (shortText && longText === shortText) return null;
+  if (!longText) {
+    return null;
+  }
+
+  if (shortText && longText === shortText) {
+    return null;
+  }
 
   return longText;
 }
@@ -263,7 +275,9 @@ async function getPublishedBookBySlug(slug: string) {
 }
 
 async function getAuthor(authorId: string | null) {
-  if (!authorId) return null;
+  if (!authorId) {
+    return null;
+  }
 
   const { data, error } = await supabaseAdmin
     .from("author_profiles")
@@ -357,7 +371,9 @@ async function getPreviewPages(bookId: string): Promise<LookInsidePreviewPage[]>
           ? getStoragePublicUrl(PREVIEW_BUCKET, page.image_path)
           : null);
 
-      if (!imageUrl) return null;
+      if (!imageUrl) {
+        return null;
+      }
 
       return {
         pageIndex: page.page_index,
@@ -376,11 +392,13 @@ function InfoCard({
   label,
   value,
 }: {
-  icon: typeof BookOpen;
+  icon: LucideIcon;
   label: string;
   value: string | number | null | undefined;
 }) {
-  if (value === null || value === undefined || value === "") return null;
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -393,6 +411,7 @@ function InfoCard({
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
             {label}
           </p>
+
           <p className="mt-1 text-sm font-semibold text-slate-900">{value}</p>
         </div>
       </div>
@@ -407,11 +426,14 @@ function TextSection({
   title: string;
   children: string | null;
 }) {
-  if (!children) return null;
+  if (!children) {
+    return null;
+  }
 
   return (
     <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
       <h2 className="text-xl font-bold text-slate-950">{title}</h2>
+
       <p className="mt-3 whitespace-pre-line leading-8 text-slate-700">
         {children}
       </p>
@@ -440,7 +462,6 @@ export default async function BookPublicPage({ params }: PageProps) {
   ]);
 
   const coverUrl = resolveCoverUrl(book, coverAsset);
-
   const summary = getSummary(book);
   const longDescription = getMainDescription(book);
   const categoryTrail = getCategoryTrail(book);
@@ -592,6 +613,7 @@ export default async function BookPublicPage({ params }: PageProps) {
                   <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
                     Gancho de venta
                   </p>
+
                   <p className="mt-2 text-lg font-semibold leading-8 text-amber-950">
                     {book.sales_hook}
                   </p>
@@ -600,6 +622,7 @@ export default async function BookPublicPage({ params }: PageProps) {
 
               <section className="mt-6">
                 <h2 className="text-xl font-bold text-slate-950">Resumen</h2>
+
                 <p className="mt-3 whitespace-pre-line text-lg leading-8 text-slate-700">
                   {summary}
                 </p>
@@ -677,6 +700,7 @@ export default async function BookPublicPage({ params }: PageProps) {
                     <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
                       <Target className="h-5 w-5" />
                     </div>
+
                     <h2 className="text-xl font-bold text-slate-950">
                       Para quién es
                     </h2>
@@ -694,6 +718,7 @@ export default async function BookPublicPage({ params }: PageProps) {
                     <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
                       <Sparkles className="h-5 w-5" />
                     </div>
+
                     <h2 className="text-xl font-bold text-slate-950">
                       Promesa al lector
                     </h2>
@@ -728,6 +753,7 @@ export default async function BookPublicPage({ params }: PageProps) {
                   <dt className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
                     Formato
                   </dt>
+
                   <dd className="mt-1 font-semibold text-slate-900">
                     {getFormatLabel(edition?.format ?? null)}
                   </dd>
@@ -737,6 +763,7 @@ export default async function BookPublicPage({ params }: PageProps) {
                   <dt className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
                     Edición
                   </dt>
+
                   <dd className="mt-1 font-semibold text-slate-900">
                     {edition?.edition_name || "Edición digital"}
                   </dd>
@@ -746,6 +773,7 @@ export default async function BookPublicPage({ params }: PageProps) {
                   <dt className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
                     ISBN
                   </dt>
+
                   <dd className="mt-1 font-semibold text-slate-900">
                     {edition?.isbn || "No especificado"}
                   </dd>
@@ -755,6 +783,7 @@ export default async function BookPublicPage({ params }: PageProps) {
                   <dt className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
                     Descarga
                   </dt>
+
                   <dd className="mt-1 font-semibold text-slate-900">
                     {edition?.download_allowed
                       ? "Disponible según compra"
@@ -767,8 +796,10 @@ export default async function BookPublicPage({ params }: PageProps) {
             <section className="rounded-[28px] border border-emerald-200 bg-emerald-50 p-6 text-emerald-900">
               <div className="flex gap-3">
                 <ShieldCheck className="mt-1 h-6 w-6 shrink-0" />
+
                 <div>
                   <h2 className="text-lg font-bold">Compra segura</h2>
+
                   <p className="mt-2 leading-7">
                     Esta página muestra la ficha pública del libro. El archivo
                     completo no se expone aquí; el acceso completo se valida en
@@ -792,6 +823,7 @@ export default async function BookPublicPage({ params }: PageProps) {
                 ].map((item) => (
                   <div key={item} className="flex items-center gap-3">
                     <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+
                     <p className="text-sm font-medium text-slate-700">
                       {item}
                     </p>

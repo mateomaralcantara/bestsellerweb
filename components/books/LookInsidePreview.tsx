@@ -1,6 +1,10 @@
+// ============================================
+// ARCHIVO: components/books/LookInsidePreview.tsx
+// ============================================
+
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   BookOpen,
@@ -42,10 +46,48 @@ type VisualSpread = {
   label: string;
 };
 
+type TextPreviewPage = {
+  label: string;
+  title: string;
+  content: string;
+};
+
+function cleanText(value?: string | null) {
+  return value?.trim() || "";
+}
+
 function getValidPages(pages: LookInsidePreviewPage[]) {
   return [...pages]
     .filter((page) => Boolean(page.imageUrl))
     .sort((a, b) => a.pageIndex - b.pageIndex);
+}
+
+function getFallbackPages(params: {
+  introduction?: string | null;
+  chapterOneExcerpt?: string | null;
+}) {
+  const pages: TextPreviewPage[] = [];
+
+  const introduction = cleanText(params.introduction);
+  const chapterOneExcerpt = cleanText(params.chapterOneExcerpt);
+
+  if (introduction) {
+    pages.push({
+      label: "Introducción",
+      title: "Introducción",
+      content: introduction,
+    });
+  }
+
+  if (chapterOneExcerpt) {
+    pages.push({
+      label: "Capítulo 1",
+      title: "Primer capítulo",
+      content: chapterOneExcerpt,
+    });
+  }
+
+  return pages;
 }
 
 function getPageLabel(page: LookInsidePreviewPage) {
@@ -56,7 +98,7 @@ function getPageLabel(page: LookInsidePreviewPage) {
   return `Página ${page.sourcePageNumber ?? page.pageIndex}`;
 }
 
-function buildSpreads(pages: LookInsidePreviewPage[]): VisualSpread[] {
+function buildSpreads(pages: LookInsidePreviewPage[]) {
   const validPages = getValidPages(pages);
   const coverPage = validPages.find((page) => page.kind === "cover") ?? null;
   const contentPages = validPages.filter((page) => page.kind !== "cover");
@@ -125,9 +167,13 @@ function getStageWidth(params: {
 
 export function LookInsidePreview({
   title,
+  subtitle,
   authorName,
+  coverUrl,
   checkoutUrl,
   pages,
+  introduction,
+  chapterOneExcerpt,
 }: LookInsidePreviewProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
 
@@ -139,27 +185,43 @@ export function LookInsidePreview({
   const visualPages = useMemo(() => getValidPages(pages), [pages]);
   const visualSpreads = useMemo(() => buildSpreads(visualPages), [visualPages]);
 
-  const hasPreview = visualPages.length > 0;
+  const fallbackPages = useMemo(
+    () => getFallbackPages({ introduction, chapterOneExcerpt }),
+    [introduction, chapterOneExcerpt]
+  );
 
-  const totalViews =
-    viewMode === "double" ? visualSpreads.length : visualPages.length;
+  const hasVisualPages = visualPages.length > 0;
+  const hasFallbackPages = fallbackPages.length > 0;
+  const hasPreview = hasVisualPages || hasFallbackPages;
+
+  const totalViews = hasVisualPages
+    ? viewMode === "double"
+      ? visualSpreads.length
+      : visualPages.length
+    : fallbackPages.length;
 
   const currentSpread =
-    viewMode === "double"
+    hasVisualPages && viewMode === "double"
       ? visualSpreads[currentIndex] ?? visualSpreads[0] ?? null
       : null;
 
   const currentSinglePage =
-    viewMode === "single"
+    hasVisualPages && viewMode === "single"
       ? visualPages[currentIndex] ?? visualPages[0] ?? null
       : null;
 
-  const currentLabel =
-    viewMode === "double"
+  const currentFallbackPage =
+    !hasVisualPages && hasFallbackPages
+      ? fallbackPages[currentIndex] ?? fallbackPages[0] ?? null
+      : null;
+
+  const currentLabel = hasVisualPages
+    ? viewMode === "double"
       ? currentSpread?.label ?? "Vista previa"
       : currentSinglePage
         ? getPageLabel(currentSinglePage)
-        : "Vista previa";
+        : "Vista previa"
+    : currentFallbackPage?.label ?? "Fragmento";
 
   const stageWidth = getStageWidth({
     viewMode,
@@ -167,8 +229,75 @@ export function LookInsidePreview({
     hasRightPage: Boolean(currentSpread?.right),
   });
 
+  const scrollToStart = useCallback(() => {
+    requestAnimationFrame(() => {
+      viewportRef.current?.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: "smooth",
+      });
+    });
+  }, []);
+
+  const openPreview = useCallback(() => {
+    if (!hasPreview) {
+      return;
+    }
+
+    setCurrentIndex(0);
+    setZoom(1);
+    setOpen(true);
+  }, [hasPreview]);
+
+  const goPrevious = useCallback(() => {
+    if (totalViews <= 1) {
+      return;
+    }
+
+    setCurrentIndex((current) =>
+      current <= 0 ? totalViews - 1 : current - 1
+    );
+
+    scrollToStart();
+  }, [scrollToStart, totalViews]);
+
+  const goNext = useCallback(() => {
+    if (totalViews <= 1) {
+      return;
+    }
+
+    setCurrentIndex((current) =>
+      current >= totalViews - 1 ? 0 : current + 1
+    );
+
+    scrollToStart();
+  }, [scrollToStart, totalViews]);
+
+  const zoomIn = useCallback(() => {
+    setZoom((current) => clampZoom(current + 0.15));
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    setZoom((current) => clampZoom(current - 0.15));
+  }, []);
+
+  const resetZoom = useCallback(() => {
+    setZoom(1);
+    scrollToStart();
+  }, [scrollToStart]);
+
+  const toggleViewMode = useCallback(() => {
+    if (!hasVisualPages) {
+      return;
+    }
+
+    setViewMode((current) => (current === "double" ? "single" : "double"));
+  }, [hasVisualPages]);
+
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -203,68 +332,13 @@ export function LookInsidePreview({
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open, currentIndex, totalViews, zoom]);
+  }, [goNext, goPrevious, open, zoomIn, zoomOut]);
 
   useEffect(() => {
     setCurrentIndex(0);
     setZoom(1);
     scrollToStart();
-  }, [viewMode]);
-
-  function scrollToStart() {
-    requestAnimationFrame(() => {
-      viewportRef.current?.scrollTo({
-        top: 0,
-        left: 0,
-        behavior: "smooth",
-      });
-    });
-  }
-
-  function openPreview() {
-    if (!hasPreview) return;
-
-    setCurrentIndex(0);
-    setZoom(1);
-    setOpen(true);
-  }
-
-  function goPrevious() {
-    if (totalViews <= 1) return;
-
-    setCurrentIndex((current) =>
-      current <= 0 ? totalViews - 1 : current - 1
-    );
-
-    scrollToStart();
-  }
-
-  function goNext() {
-    if (totalViews <= 1) return;
-
-    setCurrentIndex((current) =>
-      current >= totalViews - 1 ? 0 : current + 1
-    );
-
-    scrollToStart();
-  }
-
-  function zoomIn() {
-    setZoom((current) => clampZoom(current + 0.15));
-  }
-
-  function zoomOut() {
-    setZoom((current) => clampZoom(current - 0.15));
-  }
-
-  function resetZoom() {
-    setZoom(1);
-    scrollToStart();
-  }
-
-  function toggleViewMode() {
-    setViewMode((current) => (current === "double" ? "single" : "double"));
-  }
+  }, [scrollToStart, viewMode]);
 
   return (
     <>
@@ -288,10 +362,12 @@ export function LookInsidePreview({
           <div className="flex h-screen w-screen flex-col overflow-hidden">
             <ReaderHeader
               title={title}
+              subtitle={subtitle}
               authorName={authorName}
               checkoutUrl={checkoutUrl}
               viewMode={viewMode}
               zoom={zoom}
+              hasVisualPages={hasVisualPages}
               onToggleViewMode={toggleViewMode}
               onZoomIn={zoomIn}
               onZoomOut={zoomOut}
@@ -302,6 +378,7 @@ export function LookInsidePreview({
             <MobileToolbar
               viewMode={viewMode}
               zoom={zoom}
+              hasVisualPages={hasVisualPages}
               onToggleViewMode={toggleViewMode}
               onZoomIn={zoomIn}
               onZoomOut={zoomOut}
@@ -317,16 +394,18 @@ export function LookInsidePreview({
                 className="h-full w-full overflow-auto overscroll-contain scroll-smooth"
               >
                 <div className="flex min-h-full min-w-full items-start justify-center px-4 py-6 md:px-20 md:py-10">
-                  {viewMode === "double" && currentSpread ? (
+                  {hasVisualPages && viewMode === "double" && currentSpread ? (
                     <DoublePageView
                       spread={currentSpread}
                       stageWidth={stageWidth}
                     />
-                  ) : currentSinglePage ? (
+                  ) : hasVisualPages && currentSinglePage ? (
                     <SinglePageView
                       page={currentSinglePage}
                       stageWidth={stageWidth}
                     />
+                  ) : currentFallbackPage ? (
+                    <TextPageView page={currentFallbackPage} zoom={zoom} />
                   ) : (
                     <EmptyPreview />
                   )}
@@ -341,6 +420,8 @@ export function LookInsidePreview({
               onPrevious={goPrevious}
               onNext={goNext}
             />
+
+            <ReaderMobileBuyBar checkoutUrl={checkoutUrl} coverUrl={coverUrl} />
           </div>
         </div>
       ) : null}
@@ -350,10 +431,12 @@ export function LookInsidePreview({
 
 function ReaderHeader({
   title,
+  subtitle,
   authorName,
   checkoutUrl,
   viewMode,
   zoom,
+  hasVisualPages,
   onToggleViewMode,
   onZoomIn,
   onZoomOut,
@@ -361,10 +444,12 @@ function ReaderHeader({
   onClose,
 }: {
   title: string;
+  subtitle?: string | null;
   authorName: string;
   checkoutUrl: string;
   viewMode: ViewMode;
   zoom: number;
+  hasVisualPages: boolean;
   onToggleViewMode: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -383,17 +468,24 @@ function ReaderHeader({
           <p className="truncate text-xs text-white/60">
             {title} · {authorName}
           </p>
+          {subtitle ? (
+            <p className="hidden truncate text-[11px] text-white/40 md:block">
+              {subtitle}
+            </p>
+          ) : null}
         </div>
       </div>
 
       <div className="hidden items-center gap-2 md:flex">
-        <button
-          type="button"
-          onClick={onToggleViewMode}
-          className="rounded-xl bg-white/10 px-4 py-2 text-xs font-bold text-white transition hover:bg-white/15"
-        >
-          {viewMode === "double" ? "Ver 1 página" : "Ver 2 páginas"}
-        </button>
+        {hasVisualPages ? (
+          <button
+            type="button"
+            onClick={onToggleViewMode}
+            className="rounded-xl bg-white/10 px-4 py-2 text-xs font-bold text-white transition hover:bg-white/15"
+          >
+            {viewMode === "double" ? "Ver 1 página" : "Ver 2 páginas"}
+          </button>
+        ) : null}
 
         <div className="flex items-center rounded-xl bg-white/10 p-1">
           <button
@@ -452,6 +544,7 @@ function ReaderHeader({
 function MobileToolbar({
   viewMode,
   zoom,
+  hasVisualPages,
   onToggleViewMode,
   onZoomIn,
   onZoomOut,
@@ -459,6 +552,7 @@ function MobileToolbar({
 }: {
   viewMode: ViewMode;
   zoom: number;
+  hasVisualPages: boolean;
   onToggleViewMode: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -466,13 +560,19 @@ function MobileToolbar({
 }) {
   return (
     <div className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 md:hidden">
-      <button
-        type="button"
-        onClick={onToggleViewMode}
-        className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700"
-      >
-        {viewMode === "double" ? "1 página" : "2 páginas"}
-      </button>
+      {hasVisualPages ? (
+        <button
+          type="button"
+          onClick={onToggleViewMode}
+          className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700"
+        >
+          {viewMode === "double" ? "1 página" : "2 páginas"}
+        </button>
+      ) : (
+        <span className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700">
+          Texto
+        </span>
+      )}
 
       <div className="flex items-center gap-2">
         <button
@@ -584,6 +684,36 @@ function PreviewImage({ page }: { page: LookInsidePreviewPage }) {
   );
 }
 
+function TextPageView({
+  page,
+  zoom,
+}: {
+  page: TextPreviewPage;
+  zoom: number;
+}) {
+  return (
+    <article
+      className="w-full max-w-3xl rounded-sm bg-[#fffdf7] px-8 py-10 shadow-2xl ring-1 ring-black/10 md:px-14"
+      style={{
+        transform: `scale(${zoom})`,
+        transformOrigin: "top center",
+      }}
+    >
+      <p className="text-xs font-bold uppercase tracking-[0.22em] text-amber-700">
+        {page.label}
+      </p>
+
+      <h2 className="mt-3 text-3xl font-black text-slate-950">
+        {page.title}
+      </h2>
+
+      <p className="mt-6 whitespace-pre-line font-serif text-[19px] leading-10 text-slate-900">
+        {page.content}
+      </p>
+    </article>
+  );
+}
+
 function EmptyPreview() {
   return (
     <div className="rounded-2xl bg-white px-8 py-10 text-center text-slate-600 shadow-xl">
@@ -629,5 +759,39 @@ function ReaderFooter({
         <ChevronRight className="h-4 w-4" />
       </button>
     </footer>
+  );
+}
+
+function ReaderMobileBuyBar({
+  checkoutUrl,
+  coverUrl,
+}: {
+  checkoutUrl: string;
+  coverUrl?: string | null;
+}) {
+  return (
+    <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 md:hidden">
+      <div className="flex min-w-0 items-center gap-3">
+        {coverUrl ? (
+          <img
+            src={coverUrl}
+            alt="Portada"
+            className="h-10 w-8 shrink-0 rounded object-cover"
+          />
+        ) : null}
+
+        <p className="truncate text-xs font-semibold text-slate-600">
+          Fragmento de muestra
+        </p>
+      </div>
+
+      <Link
+        href={checkoutUrl}
+        className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#ffd814] px-4 py-2 text-xs font-black text-slate-950 transition hover:bg-[#f7ca00]"
+      >
+        <ShoppingCart className="h-4 w-4" />
+        Comprar
+      </Link>
+    </div>
   );
 }

@@ -26,10 +26,10 @@ const ALLOWED_CREATE_STATUSES = new Set(["draft", "under_review"]);
 const DEV_MODE = process.env.NODE_ENV !== "production";
 const DEV_TEST_USER_ID = process.env.DEV_TEST_USER_ID?.trim() || "";
 
-type BookAssetType = "pdf" | "epub";
+type BookAssetType = "manuscript_pdf" | "pdf" | "epub";
 type CreateBookStatus = "draft" | "under_review";
-type PreviewMode = "first_pages" | "manual" | "disabled";
-type PreviewStatus = "disabled" | "pending" | "unsupported";
+type PreviewMode = "first_pages" | "pdf_images" | "epub_preview" | "manual" | "disabled";
+type PreviewStatus = "disabled" | "pending" | "ready" | "unsupported";
 type RecordId = string | number;
 
 type EffectiveUser = {
@@ -46,6 +46,7 @@ type RollbackState = {
   editionId: RecordId | null;
   coverPath: string | null;
   filePath: string | null;
+  previewPath: string | null;
 };
 
 type UploadBookForm = {
@@ -95,12 +96,14 @@ type UploadBookForm = {
 
   cover: File;
   bookFile: File;
+  previewEpub: File | null;
 };
 
 type StorageUploadResult = {
   coverPath: string;
   coverUrl: string;
   filePath: string;
+  previewPath: string | null;
   bookAssetType: BookAssetType;
 };
 
@@ -193,11 +196,16 @@ function parsePreviewPageCount(formData: FormData): number {
 function parsePreviewMode(formData: FormData): PreviewMode {
   const raw = readTextField(formData, "preview_mode");
 
-  if (raw === "manual" || raw === "disabled") {
+  if (
+    raw === "epub_preview" ||
+    raw === "manual" ||
+    raw === "disabled" ||
+    raw === "first_pages" || raw === "pdf_images"
+  ) {
     return raw;
   }
 
-  return "first_pages";
+  return "pdf_images";
 }
 
 function requireFileField(formData: FormData, key: string): File | null {
@@ -249,7 +257,7 @@ function getBookAssetType(file: File): BookAssetType {
     return "epub";
   }
 
-  return "pdf";
+  return "manuscript_pdf";
 }
 
 function normalizeEditionFormat(format: string) {
@@ -306,6 +314,16 @@ function isAllowedBookFile(file: File): boolean {
     file.type === "application/octet-stream";
 
   return hasValidExtension && hasValidMime;
+}
+
+function isEpubFile(file: File): boolean {
+  const ext = getExtension(file.name);
+
+  return (
+    ext === "epub" ||
+    file.type === "application/epub+zip" ||
+    file.type === "application/octet-stream"
+  );
 }
 
 function resolveErrorStatus(message: string): number {
@@ -503,6 +521,10 @@ async function rollback(state: RollbackState): Promise<void> {
     if (state.filePath) {
       await supabaseAdmin.storage.from(FILE_BUCKET).remove([state.filePath]);
     }
+
+    if (state.previewPath) {
+      await supabaseAdmin.storage.from(FILE_BUCKET).remove([state.previewPath]);
+    }
   } catch (rollbackError) {
     console.error("ROLLBACK ERROR:", rollbackError);
   }
@@ -572,7 +594,7 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
     true
   );
   const previewLayout =
-    readTextField(formData, "preview_layout") || "two_page_horizontal";
+    readTextField(formData, "preview_layout") || "epub_reader";
   const previewProgressEnabled = parseBooleanField(
     formData,
     "preview_progress_enabled",
@@ -580,7 +602,12 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
   );
 
   const cover = requireFileField(formData, "cover");
-  const bookFile = requireFileField(formData, "book_file");
+  const bookFile =
+    requireFileField(formData, "manuscript_pdf") ||
+    requireFileField(formData, "pdf_file") ||
+    requireFileField(formData, "book_pdf") ||
+    requireFileField(formData, "book_file");
+  const previewEpub: File | null = null;
 
   if (!title) throw new Error("El título es obligatorio");
 
@@ -597,14 +624,16 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
   }
 
   if (!cover) throw new Error("La portada es obligatoria");
-  if (!bookFile) throw new Error("El archivo del libro es obligatorio");
+  if (!bookFile) throw new Error("El archivo completo del libro es obligatorio");
 
   if (cover.size > MAX_COVER_SIZE_BYTES) {
     throw new Error(`La portada no debe superar ${MAX_COVER_SIZE_MB} MB`);
   }
 
   if (bookFile.size > MAX_BOOK_SIZE_BYTES) {
-    throw new Error(`El archivo del libro no debe superar ${MAX_BOOK_SIZE_MB} MB`);
+    throw new Error(
+      `El PDF principal no debe superar ${MAX_BOOK_SIZE_MB} MB`
+    );
   }
 
   if (!isValidImageFile(cover)) {
@@ -612,13 +641,13 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
   }
 
   if (!isAllowedBookFile(bookFile)) {
-    throw new Error("El archivo del libro debe ser PDF o EPUB");
+    throw new Error("El archivo completo del libro debe ser PDF o EPUB");
+  }
+  if (getBookAssetType(bookFile) === "epub") {
+    throw new Error("El manuscrito principal debe ser PDF. El EPUB queda como formato opcional separado.");
   }
 
-  if (pageCount !== null && (!Number.isInteger(pageCount) || pageCount < 1)) {
-    throw new Error("El número de páginas no es válido");
-  }
-
+  // Preview EPUB eliminado: el preview se genera automáticamente desde el PDF principal.
   if (
     affiliateCommissionPercentage !== null &&
     affiliateCommissionPercentage > 100
@@ -673,6 +702,7 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
 
     cover,
     bookFile,
+    previewEpub,
   };
 }
 
@@ -688,6 +718,8 @@ async function uploadBookStorage(params: {
   const coverPath = `covers/${params.slug}-${randomUUID()}.${coverExt}`;
   const filePath = `books/${params.slug}-${randomUUID()}.${bookExt}`;
 
+  let previewPath: string | null = null;
+
   await Promise.all([
     uploadFile({
       bucket: COVER_BUCKET,
@@ -701,10 +733,22 @@ async function uploadBookStorage(params: {
     }),
   ]);
 
+  if (params.form.previewEpub) {
+    const previewExt = getMimeExtension(params.form.previewEpub, "epub");
+    previewPath = `previews/${params.slug}-${randomUUID()}.${previewExt}`;
+
+    await uploadFile({
+      bucket: FILE_BUCKET,
+      storagePath: previewPath,
+      file: params.form.previewEpub,
+    });
+  }
+
   return {
     coverPath,
     coverUrl: getPublicUrl(COVER_BUCKET, coverPath),
     filePath,
+    previewPath,
     bookAssetType,
   };
 }
@@ -712,6 +756,7 @@ async function uploadBookStorage(params: {
 function getPreviewStatus(params: {
   previewMode: PreviewMode;
   bookAssetType: BookAssetType;
+  hasPreviewEpub: boolean;
 }): {
   status: PreviewStatus;
   error: string | null;
@@ -723,11 +768,26 @@ function getPreviewStatus(params: {
     };
   }
 
-  if (params.bookAssetType === "epub") {
+  if (params.previewMode === "epub_preview") {
+    if (params.hasPreviewEpub) {
+      return {
+        status: "ready",
+        error: null,
+      };
+    }
+
     return {
       status: "unsupported",
-      error:
-        "El EPUB fue guardado correctamente, pero la muestra visual tipo páginas requiere PDF.",
+      error: "Este libro no tiene EPUB de muestra.",
+    };
+  }
+
+  if (params.bookAssetType === "epub") {
+    return {
+      status: params.hasPreviewEpub ? "ready" : "unsupported",
+      error: params.hasPreviewEpub
+        ? null
+        : "El EPUB fue guardado, pero falta el EPUB de muestra.",
     };
   }
 
@@ -744,12 +804,14 @@ async function createBookRecord(params: {
   slug: string;
   coverUrl: string;
   bookAssetType: BookAssetType;
+  hasPreviewEpub: boolean;
 }) {
   const now = new Date().toISOString();
 
   const preview = getPreviewStatus({
     previewMode: params.form.previewMode,
     bookAssetType: params.bookAssetType,
+    hasPreviewEpub: params.hasPreviewEpub,
   });
 
   const payload: Record<string, unknown> = {
@@ -795,7 +857,7 @@ async function createBookRecord(params: {
     preview_progress_enabled: params.form.previewProgressEnabled,
     preview_status: preview.status,
     preview_error: preview.error,
-    preview_generated_at: null,
+    preview_generated_at: preview.status === "ready" ? now : null,
 
     created_at: now,
     updated_at: now,
@@ -842,12 +904,14 @@ async function createAssetRecords(params: {
   editionId: RecordId;
   coverPath: string;
   filePath: string;
+  previewPath: string | null;
   coverUrl: string;
   coverMimeType: string | null;
   fileMimeType: string | null;
+  previewMimeType: string | null;
   bookAssetType: BookAssetType;
 }) {
-  const { error } = await supabaseAdmin.from("book_assets").insert([
+  const assets: Record<string, unknown>[] = [
     {
       book_id: params.bookId,
       edition_id: null,
@@ -870,7 +934,23 @@ async function createAssetRecords(params: {
       is_public: false,
       sort_order: 1,
     },
-  ]);
+  ];
+
+  if (params.previewPath) {
+    assets.push({
+      book_id: params.bookId,
+      edition_id: null,
+      asset_type: "epub_preview",
+      storage_bucket: FILE_BUCKET,
+      storage_path: params.previewPath,
+      file_url: null,
+      mime_type: params.previewMimeType || "application/epub+zip",
+      is_public: false,
+      sort_order: 2,
+    });
+  }
+
+  const { error } = await supabaseAdmin.from("book_assets").insert(assets);
 
   if (error) {
     throw new Error(`Error guardando assets: ${error.message}`);
@@ -883,6 +963,10 @@ function buildPreviewCommand(params: {
   bookAssetType: BookAssetType;
 }): string | null {
   if (params.form.previewMode === "disabled") {
+    return null;
+  }
+
+  if (params.form.previewMode === "epub_preview") {
     return null;
   }
 
@@ -904,6 +988,7 @@ export async function POST(request: Request) {
     editionId: null,
     coverPath: null,
     filePath: null,
+    previewPath: null,
   };
 
   try {
@@ -930,6 +1015,7 @@ export async function POST(request: Request) {
 
     rollbackState.coverPath = storage.coverPath;
     rollbackState.filePath = storage.filePath;
+    rollbackState.previewPath = storage.previewPath;
 
     const insertedBook = await createBookRecord({
       ownerUserId: effectiveUser.id,
@@ -938,6 +1024,7 @@ export async function POST(request: Request) {
       slug,
       coverUrl: storage.coverUrl,
       bookAssetType: storage.bookAssetType,
+      hasPreviewEpub: Boolean(storage.previewPath),
     });
 
     const insertedBookId = (insertedBook as { id: RecordId }).id;
@@ -955,9 +1042,11 @@ export async function POST(request: Request) {
       editionId: insertedEdition.id,
       coverPath: storage.coverPath,
       filePath: storage.filePath,
+      previewPath: storage.previewPath,
       coverUrl: storage.coverUrl,
       coverMimeType: form.cover.type || null,
       fileMimeType: form.bookFile.type || null,
+      previewMimeType: form.previewEpub?.type || "application/epub+zip",
       bookAssetType: storage.bookAssetType,
     });
 
@@ -970,6 +1059,7 @@ export async function POST(request: Request) {
     const previewStatus = getPreviewStatus({
       previewMode: form.previewMode,
       bookAssetType: storage.bookAssetType,
+      hasPreviewEpub: Boolean(storage.previewPath),
     });
 
     return Response.json(
@@ -986,6 +1076,7 @@ export async function POST(request: Request) {
           cover_url: storage.coverUrl,
           file_bucket: FILE_BUCKET,
           file_path: storage.filePath,
+          preview_path: storage.previewPath,
           file_is_public: false,
           book_asset_type: storage.bookAssetType,
         },
@@ -1015,3 +1106,6 @@ export async function POST(request: Request) {
     return jsonError(message, resolveErrorStatus(message));
   }
 }
+
+
+

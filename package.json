@@ -21,22 +21,26 @@
     "repair:catalog": "node scripts/repair-catalog-page-escapes.mjs",
     "fix:books-route": "node scripts/fix-books-route-no-native-preview.mjs",
     "preview:missing": "node scripts/generate-missing-book-previews.mjs",
-    "env:vercel": "node scripts/list-vercel-env.mjs"
+    "env:vercel": "node scripts/list-vercel-env.mjs",
+    "verify:epub-preview": "node scripts/verify-epub-preview.mjs",
+    "preview:book": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/generate-book-preview.ps1"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.0",
     "@prisma/client": "^7.6.0",
     "@supabase/ssr": "^0.10.0",
-    "@supabase/supabase-js": "^2.105.4",
+    "@supabase/supabase-js": "^2.107.0",
     "clsx": "^2.1.1",
+    "dotenv": "^17.4.2",
     "epubjs": "^0.3.93",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.511.0",
     "next": "^14.2.35",
     "pdf-poppler": "^0.2.3",
     "pdfjs-dist": "^5.7.284",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "tailwind-merge": "^2.5.2"
+    "tailwind-merge": "^2.6.1"
   },
   "devDependencies": {
     "@types/node": "^22.7.4",

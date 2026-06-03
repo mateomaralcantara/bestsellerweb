@@ -119,7 +119,7 @@ export default function ManuscriptUploader({ bookId, slug }: Props) {
 
       <input
         type="file"
-        accept=".pdf,.epub,.doc,.docx,.txt"
+        accept="application/pdf,.pdf"
         onChange={(e) => {
           const nextFile = e.target.files?.[0] || null;
           setFile(nextFile);
