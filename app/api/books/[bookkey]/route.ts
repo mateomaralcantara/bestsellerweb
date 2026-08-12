@@ -869,6 +869,19 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     const price = parseRequiredPrice(formData);
     const currency = readText(formData, "currency") || "DOP";
+    const paypalPrice = parseNullableNumber(formData, "paypal_price");
+    const paypalCurrency = (
+      readText(formData, "paypal_currency") || "USD"
+    ).toUpperCase();
+
+    if (paypalPrice !== null && paypalPrice <= 0) {
+      return jsonError("El precio PayPal debe ser mayor que cero.", 400);
+    }
+
+    if (paypalCurrency !== "USD") {
+      return jsonError("La moneda PayPal debe ser USD.", 400);
+    }
+
     const editionId = await getOrCreateEdition(book.id, price, currency);
     const now = new Date().toISOString();
 
@@ -917,6 +930,8 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     const editionUpdate: Record<string, unknown> = {
       price,
       currency,
+      paypal_price: paypalPrice,
+      paypal_currency: paypalCurrency,
       format: readText(formData, "format") || "ebook",
       edition_name: nullableText(formData, "edition_name") || "Edición digital",
       compare_at_price: parseNullableNumber(formData, "compare_at_price"),

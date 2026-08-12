@@ -1,3 +1,4 @@
+import { PayPalCatalogAutoButton } from "@/components/payments/paypal-catalog-auto-button";
 import type { Metadata } from "next";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
@@ -109,6 +110,7 @@ export default function RootLayout({
             <SiteFooter />
           </div>
         </CartProvider>
+              <PayPalCatalogAutoButton />
       </body>
     </html>
   );

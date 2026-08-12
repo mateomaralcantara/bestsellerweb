@@ -80,6 +80,8 @@ type UploadBookForm = {
 
   price: number;
   currency: string;
+  paypalPrice: number | null;
+  paypalCurrency: string;
   compareAtPrice: number | null;
   pageCount: number | null;
   isbn: string | null;
@@ -574,6 +576,10 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
 
   const price = parseRequiredPrice(readTextField(formData, "price"));
   const currency = readTextField(formData, "currency") || "DOP";
+  const paypalPrice = parseNullableNumberField(formData, "paypal_price");
+  const paypalCurrency = (
+    readTextField(formData, "paypal_currency") || "USD"
+  ).toUpperCase();
   const compareAtPrice = parseNullableNumberField(formData, "compare_at_price");
   const pageCount = parseNullableNumberField(formData, "page_count");
   const isbn = readNullableTextField(formData, "isbn");
@@ -610,6 +616,14 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
   const previewEpub: File | null = null;
 
   if (!title) throw new Error("El título es obligatorio");
+
+  if (paypalPrice !== null && paypalPrice <= 0) {
+    throw new Error("El precio PayPal debe ser mayor que cero");
+  }
+
+  if (paypalCurrency !== "USD") {
+    throw new Error("La moneda PayPal debe ser USD");
+  }
 
   if (!descriptionInput) {
     throw new Error("La descripción comercial es obligatoria");
@@ -686,6 +700,8 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
 
     price,
     currency,
+    paypalPrice,
+    paypalCurrency,
     compareAtPrice,
     pageCount,
     isbn,
@@ -880,6 +896,8 @@ async function createEditionRecord(params: {
     edition_name: "Edición digital",
     price: params.form.price,
     currency: params.form.currency,
+    paypal_price: params.form.paypalPrice,
+    paypal_currency: params.form.paypalCurrency,
     compare_at_price: params.form.compareAtPrice,
     page_count: params.form.pageCount,
     isbn: params.form.isbn,
