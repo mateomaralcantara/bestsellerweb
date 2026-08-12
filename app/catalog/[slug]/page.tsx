@@ -20,6 +20,7 @@ import {
   LookInsidePreview,
   type LookInsidePreviewPage,
 } from "@/components/books/LookInsidePreview";
+import { CatalogPurchaseActions } from "@/components/payments/catalog-purchase-actions";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -85,6 +86,11 @@ type EditionRecord = {
   affiliate_enabled: boolean | null;
   affiliate_commission_percentage: number | null;
   download_allowed: boolean | null;
+};
+
+type PayPalPricingRecord = {
+  paypal_price: number | null;
+  paypal_currency: string | null;
 };
 
 type CoverAssetRecord = {
@@ -311,6 +317,33 @@ async function getEdition(bookId: string) {
   return (data as EditionRecord | null) ?? null;
 }
 
+async function getPayPalPricing(bookId: string) {
+  const editionResult = await supabaseAdmin
+    .from("book_editions")
+    .select("paypal_price, paypal_currency")
+    .eq("book_id", bookId)
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (!editionResult.error && editionResult.data?.paypal_price != null) {
+    return editionResult.data as PayPalPricingRecord;
+  }
+
+  const bookResult = await supabaseAdmin
+    .from("books")
+    .select("paypal_price, paypal_currency")
+    .eq("id", bookId)
+    .maybeSingle();
+
+  if (!bookResult.error && bookResult.data?.paypal_price != null) {
+    return bookResult.data as PayPalPricingRecord;
+  }
+
+  return null;
+}
+
 async function getCoverAsset(bookId: string) {
   const { data, error } = await supabaseAdmin
     .from("book_assets")
@@ -454,9 +487,10 @@ export default async function BookPublicPage({ params }: PageProps) {
     notFound();
   }
 
-  const [author, edition, coverAsset, previewPages] = await Promise.all([
+  const [author, edition, paypalPricing, coverAsset, previewPages] = await Promise.all([
     getAuthor(book.author_id),
     getEdition(book.id),
+    getPayPalPricing(book.id),
     getCoverAsset(book.id),
     getPreviewPages(book.id),
   ]);
@@ -468,17 +502,39 @@ export default async function BookPublicPage({ params }: PageProps) {
   const keywords = getKeywordList(book);
   const authorName = getAuthorName(author);
 
+  const localPrice = edition?.price ?? null;
+  const localCurrency = edition?.currency ?? null;
+
+  const explicitPayPalPrice = paypalPricing?.paypal_price ?? null;
+  const explicitPayPalCurrency =
+    paypalPricing?.paypal_currency ?? "USD";
+
+  const paypalPrice =
+    explicitPayPalPrice ??
+    (localCurrency?.toUpperCase() === "USD" ? localPrice : null);
+  const paypalCurrency = explicitPayPalPrice
+    ? explicitPayPalCurrency.toUpperCase()
+    : "USD";
+  const paypalReady =
+    typeof paypalPrice === "number" &&
+    paypalPrice > 0 &&
+    paypalCurrency === "USD";
+
   const formattedPrice = formatMoney(
-    edition?.price ?? null,
-    edition?.currency ?? null
+    localPrice ?? paypalPrice,
+    localPrice != null ? localCurrency : paypalCurrency
   );
+
+  const formattedPayPalPrice = paypalReady
+    ? formatMoney(paypalPrice, paypalCurrency)
+    : null;
 
   const compareAtPrice = formatMoney(
     edition?.compare_at_price ?? null,
     edition?.currency ?? null
   );
 
-  const checkoutUrl = `/checkout?book=${encodeURIComponent(book.slug)}`;
+  const checkoutUrl = `/checkout/paypal?bookId=${encodeURIComponent(book.id)}`;
   const readerUrl = `/reader/${encodeURIComponent(book.slug)}`;
 
   return (
@@ -517,13 +573,27 @@ export default async function BookPublicPage({ params }: PageProps) {
                 ) : null}
               </div>
 
+              {formattedPayPalPrice ? (
+                <p className="mt-2 text-sm font-semibold text-blue-700">
+                  PayPal cobrará {formattedPayPalPrice}
+                </p>
+              ) : (
+                <p className="mt-2 text-sm font-semibold text-amber-700">
+                  Precio PayPal en USD pendiente de configuración
+                </p>
+              )}
+
               <div className="mt-5 grid gap-3">
-                <Link
-                  href={checkoutUrl}
-                  className="inline-flex items-center justify-center rounded-2xl bg-black px-5 py-3 font-semibold text-white transition hover:opacity-90"
-                >
-                  Comprar libro
-                </Link>
+                <CatalogPurchaseActions
+                  bookId={book.id}
+                  slug={book.slug}
+                  title={book.title}
+                  authorName={authorName}
+                  coverUrl={coverUrl}
+                  price={localPrice}
+                  format={edition?.format ?? "ebook"}
+                  paypalReady={paypalReady}
+                />
 
                 <LookInsidePreview
                   title={book.title}
