@@ -45,6 +45,8 @@ type EditionForEdit = {
   edition_name: string | null;
   price: number | null;
   currency: string | null;
+  paypal_price?: number | null;
+  paypal_currency?: string | null;
   format: string | null;
   compare_at_price: number | null;
   page_count: number | null;
@@ -427,6 +429,7 @@ export default function EditBookForm({ book, edition }: EditBookFormProps) {
     const primaryCategory = readText(formData, "primary_category");
     const keywords = parseKeywords(readText(formData, "keywords"));
     const price = parsePrice(readText(formData, "price"));
+    const paypalPriceText = readText(formData, "paypal_price");
     const compareAtPrice = readText(formData, "compare_at_price");
     const pageCount = readText(formData, "page_count");
     const affiliateCommission = readText(
@@ -446,6 +449,13 @@ export default function EditBookForm({ book, edition }: EditBookFormProps) {
     }
 
     if (price === null) return "El precio no es válido.";
+
+    if (paypalPriceText) {
+      const paypalPrice = parsePrice(paypalPriceText);
+      if (paypalPrice === null || paypalPrice <= 0) {
+        return "El precio PayPal en USD debe ser mayor que cero.";
+      }
+    }
 
     if (compareAtPrice && parsePrice(compareAtPrice) === null) {
       return "El precio anterior no es válido.";
@@ -887,6 +897,40 @@ export default function EditBookForm({ book, edition }: EditBookFormProps) {
                 className={inputClassName}
               />
             </label>
+          </div>
+
+          <div className="mt-5 rounded-3xl border-2 border-blue-200 bg-blue-50 p-5">
+            <div className="grid gap-4 md:grid-cols-[1fr_180px] md:items-end">
+              <label className={labelClassName}>
+                <span>Precio PayPal (USD)</span>
+                <input
+                  name="paypal_price"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  defaultValue={edition?.paypal_price ?? ""}
+                  placeholder="19.99"
+                  disabled={isSubmitting}
+                  className={inputClassName}
+                  inputMode="decimal"
+                />
+              </label>
+
+              <label className={labelClassName}>
+                <span>Moneda PayPal</span>
+                <input
+                  name="paypal_currency"
+                  value="USD"
+                  readOnly
+                  className={`${inputClassName} bg-white font-black`}
+                />
+              </label>
+            </div>
+
+            <p className="mt-3 text-xs leading-5 text-blue-900">
+              Escribe el importe real que PayPal cobrará. No copies el precio
+              en DOP ni cambies solamente el símbolo.
+            </p>
           </div>
 
           <div className="mt-5 grid gap-5 md:grid-cols-3">

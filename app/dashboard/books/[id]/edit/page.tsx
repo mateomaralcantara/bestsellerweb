@@ -43,6 +43,8 @@ type EditionForEdit = {
   edition_name: string | null;
   price: number | null;
   currency: string | null;
+  paypal_price?: number | null;
+  paypal_currency?: string | null;
   format: string | null;
   compare_at_price: number | null;
   page_count: number | null;
@@ -146,5 +148,23 @@ export default async function EditBookPage({ params }: PageProps) {
     console.error("Error cargando edición del libro:", editionError.message);
   }
 
-  return <EditBookForm book={book} edition={edition ?? null} />;
+  let editionWithPayPal: EditionForEdit | null = edition ?? null;
+
+  if (edition?.id) {
+    const { data: paypalPricing } = await supabase
+      .from("book_editions")
+      .select("paypal_price, paypal_currency")
+      .eq("id", edition.id)
+      .maybeSingle();
+
+    if (paypalPricing) {
+      editionWithPayPal = {
+        ...edition,
+        paypal_price: paypalPricing.paypal_price,
+        paypal_currency: paypalPricing.paypal_currency,
+      };
+    }
+  }
+
+  return <EditBookForm book={book} edition={editionWithPayPal} />;
 }
