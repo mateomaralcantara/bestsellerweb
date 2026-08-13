@@ -1,5 +1,6 @@
 import Link from "next/link";
 import React from "react";
+import { getAdminAccess } from "@/lib/admin-access";
 
 const dashboardLinks = [
   {
@@ -34,11 +35,24 @@ const dashboardLinks = [
   },
 ];
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const access = await getAdminAccess();
+  const visibleLinks = access.isAdmin
+    ? [
+        ...dashboardLinks.slice(0, 1),
+        {
+          href: "/dashboard/purchases",
+          label: "Compras activas",
+          description: "Usuarios y libros adquiridos",
+        },
+        ...dashboardLinks.slice(1),
+      ]
+    : dashboardLinks;
+
   return (
     <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-6">
@@ -63,7 +77,7 @@ export default function DashboardLayout({
           </p>
 
           <nav className="space-y-2">
-            {dashboardLinks.map((item) => (
+            {visibleLinks.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
