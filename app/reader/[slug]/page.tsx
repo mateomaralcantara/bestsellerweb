@@ -84,6 +84,7 @@ export default async function ReaderPage({ params }: PageProps) {
         title={book.title}
         coverUrl={book.cover_url}
         pdfUrl={`/api/books/${encodeURIComponent(book.slug)}/read`}
+        progressUrl={`/api/books/${encodeURIComponent(book.slug)}/progress`}
       />
     </main>
   );

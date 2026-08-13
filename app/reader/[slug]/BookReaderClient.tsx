@@ -32,10 +32,29 @@ type BookReaderClientProps = {
   title: string;
   coverUrl: string | null;
   pdfUrl: string;
+  progressUrl: string;
 };
 
 type ViewMode = "single" | "spread";
 type FitMode = "page" | "width" | "custom";
+type ProgressSaveStatus =
+  | "loading"
+  | "ready"
+  | "restored"
+  | "saving"
+  | "saved"
+  | "local";
+
+type ProgressSnapshot = {
+  currentPage: number;
+  totalPages: number;
+  updatedAt: string;
+};
+
+type ProgressRestoreResult = {
+  snapshot: ProgressSnapshot | null;
+  source: "server" | "local" | null;
+};
 
 type StageSize = {
   width: number;
@@ -56,6 +75,7 @@ const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.25;
 const CUSTOM_BASE_SCALE = 1.25;
 const TOOLBAR_HEIGHT_ALLOWANCE = 64;
+const PROGRESS_SAVE_DELAY = 750;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -71,6 +91,57 @@ function isEditableTarget(target: EventTarget | null) {
     element.tagName === "TEXTAREA" ||
     element.tagName === "SELECT"
   );
+}
+
+function parseProgressSnapshot(value: unknown): ProgressSnapshot | null {
+  if (!value || typeof value !== "object") return null;
+
+  const progress = value as Record<string, unknown>;
+  const currentPage = Math.round(Number(progress.currentPage));
+  const totalPages = Math.round(Number(progress.totalPages));
+  const updatedAt =
+    typeof progress.updatedAt === "string" && progress.updatedAt
+      ? progress.updatedAt
+      : new Date(0).toISOString();
+
+  if (
+    !Number.isFinite(currentPage) ||
+    !Number.isFinite(totalPages) ||
+    currentPage < 1 ||
+    totalPages < 1
+  ) {
+    return null;
+  }
+
+  return {
+    currentPage,
+    totalPages,
+    updatedAt,
+  };
+}
+
+function getSnapshotTime(snapshot: ProgressSnapshot | null) {
+  if (!snapshot) return 0;
+
+  const time = new Date(snapshot.updatedAt).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function readLocalProgress(key: string) {
+  try {
+    const stored = window.localStorage.getItem(key);
+    return stored ? parseProgressSnapshot(JSON.parse(stored)) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalProgress(key: string, snapshot: ProgressSnapshot) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(snapshot));
+  } catch {
+    // El servidor seguirá guardando el avance si localStorage está bloqueado.
+  }
 }
 
 function getPageScale(params: {
@@ -414,11 +485,16 @@ export default function BookReaderClient({
   title,
   coverUrl,
   pdfUrl,
+  progressUrl,
 }: BookReaderClientProps) {
   const shellRef = useRef<HTMLElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const sidebarRef = useRef<HTMLElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
+  const progressInitializedRef = useRef(false);
+  const currentPageRef = useRef(1);
+  const totalPagesRef = useRef(0);
+  const lastServerSavedPageRef = useRef<number | null>(null);
 
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(true);
@@ -437,9 +513,92 @@ export default function BookReaderClient({
     height: 720,
   });
   const [isDragging, setIsDragging] = useState(false);
+  const [progressSaveStatus, setProgressSaveStatus] =
+    useState<ProgressSaveStatus>("loading");
+  const [restoredPage, setRestoredPage] = useState<number | null>(null);
 
   const totalPages = pdf?.numPages ?? 0;
   const pageStep = viewMode === "spread" ? 2 : 1;
+  const localProgressKey = useMemo(
+    () => `bestseller-reader-progress:${progressUrl}`,
+    [progressUrl]
+  );
+
+  const loadSavedProgress = useCallback(async (): Promise<ProgressRestoreResult> => {
+    const localSnapshot = readLocalProgress(localProgressKey);
+    let serverSnapshot: ProgressSnapshot | null = null;
+
+    try {
+      const response = await fetch(progressUrl, {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+
+      if (response.ok) {
+        const body = (await response.json()) as { progress?: unknown };
+        serverSnapshot = parseProgressSnapshot(body.progress);
+      }
+    } catch {
+      // La copia local permite continuar incluso sin conexión momentánea.
+    }
+
+    if (
+      localSnapshot &&
+      (!serverSnapshot ||
+        getSnapshotTime(localSnapshot) > getSnapshotTime(serverSnapshot))
+    ) {
+      return {
+        snapshot: localSnapshot,
+        source: "local",
+      };
+    }
+
+    if (serverSnapshot) {
+      return {
+        snapshot: serverSnapshot,
+        source: "server",
+      };
+    }
+
+    return {
+      snapshot: localSnapshot,
+      source: localSnapshot ? "local" : null,
+    };
+  }, [localProgressKey, progressUrl]);
+
+  const saveProgressToServer = useCallback(
+    async (snapshot: ProgressSnapshot) => {
+      writeLocalProgress(localProgressKey, snapshot);
+      setProgressSaveStatus("saving");
+
+      try {
+        const response = await fetch(progressUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "same-origin",
+          cache: "no-store",
+          body: JSON.stringify({
+            currentPage: snapshot.currentPage,
+            totalPages: snapshot.totalPages,
+          }),
+        });
+
+        if (!response.ok) {
+          setProgressSaveStatus("local");
+          return;
+        }
+
+        lastServerSavedPageRef.current = snapshot.currentPage;
+        setProgressSaveStatus("saved");
+      } catch {
+        setProgressSaveStatus("local");
+      }
+    },
+    [localProgressKey, progressUrl]
+  );
 
   const setSafePage = useCallback(
     (page: number) => {
@@ -489,8 +648,14 @@ export default function BookReaderClient({
 
     async function loadPdf() {
       try {
+        progressInitializedRef.current = false;
+        lastServerSavedPageRef.current = null;
+        setProgressSaveStatus("loading");
+        setRestoredPage(null);
         setLoading(true);
         setError(null);
+
+        const savedProgressPromise = loadSavedProgress();
 
         const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
@@ -502,7 +667,10 @@ export default function BookReaderClient({
           withCredentials: false,
         });
 
-        const document = await loadingTask.promise;
+        const [document, savedProgress] = await Promise.all([
+          loadingTask.promise,
+          savedProgressPromise,
+        ]);
 
         if (cancelled) {
           await document.destroy();
@@ -510,12 +678,32 @@ export default function BookReaderClient({
         }
 
         localPdf = document;
+        const initialPage = clamp(
+          savedProgress.snapshot?.currentPage ?? 1,
+          1,
+          Math.max(1, document.numPages)
+        );
+
         setPdf(document);
-        setCurrentPage(1);
-        setPageInput("1");
+        setCurrentPage(initialPage);
+        setPageInput(String(initialPage));
+        currentPageRef.current = initialPage;
+        totalPagesRef.current = document.numPages;
+        lastServerSavedPageRef.current =
+          savedProgress.source === "server" ? initialPage : null;
+        progressInitializedRef.current = true;
+
+        if (initialPage > 1) {
+          setRestoredPage(initialPage);
+          setProgressSaveStatus("restored");
+        } else {
+          setProgressSaveStatus("ready");
+        }
+
         setLoading(false);
       } catch {
         if (!cancelled) {
+          progressInitializedRef.current = false;
           setLoading(false);
           setError(
             "No se pudo abrir el libro. Actualiza la página o inicia sesión nuevamente."
@@ -528,9 +716,124 @@ export default function BookReaderClient({
 
     return () => {
       cancelled = true;
+      progressInitializedRef.current = false;
       void localPdf?.destroy();
     };
-  }, [pdfUrl]);
+  }, [loadSavedProgress, pdfUrl]);
+
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
+
+  useEffect(() => {
+    totalPagesRef.current = totalPages;
+  }, [totalPages]);
+
+  useEffect(() => {
+    if (
+      !progressInitializedRef.current ||
+      loading ||
+      totalPages < 1
+    ) {
+      return;
+    }
+
+    const snapshot: ProgressSnapshot = {
+      currentPage,
+      totalPages,
+      updatedAt: new Date().toISOString(),
+    };
+
+    writeLocalProgress(localProgressKey, snapshot);
+
+    if (lastServerSavedPageRef.current === currentPage) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void saveProgressToServer(snapshot);
+    }, PROGRESS_SAVE_DELAY);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    currentPage,
+    loading,
+    localProgressKey,
+    saveProgressToServer,
+    totalPages,
+  ]);
+
+  useEffect(() => {
+    const flushProgress = () => {
+      if (!progressInitializedRef.current) return;
+
+      const currentPageValue = currentPageRef.current;
+      const totalPagesValue = totalPagesRef.current;
+
+      if (
+        currentPageValue < 1 ||
+        totalPagesValue < 1 ||
+        lastServerSavedPageRef.current === currentPageValue
+      ) {
+        return;
+      }
+
+      const snapshot: ProgressSnapshot = {
+        currentPage: currentPageValue,
+        totalPages: totalPagesValue,
+        updatedAt: new Date().toISOString(),
+      };
+      const body = JSON.stringify({
+        currentPage: currentPageValue,
+        totalPages: totalPagesValue,
+      });
+
+      writeLocalProgress(localProgressKey, snapshot);
+
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(
+          progressUrl,
+          new Blob([body], { type: "application/json" })
+        );
+        return;
+      }
+
+      void fetch(progressUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        keepalive: true,
+        body,
+      }).catch(() => undefined);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flushProgress();
+    };
+
+    window.addEventListener("pagehide", flushProgress);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("pagehide", flushProgress);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [localProgressKey, progressUrl]);
+
+  useEffect(() => {
+    if (!restoredPage) return;
+
+    const timer = window.setTimeout(() => {
+      setRestoredPage(null);
+      setProgressSaveStatus((current) =>
+        current === "restored" ? "saved" : current
+      );
+    }, 5000);
+
+    return () => window.clearTimeout(timer);
+  }, [restoredPage]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -694,6 +997,29 @@ export default function BookReaderClient({
   const progress = totalPages
     ? Math.min(100, (currentPage / totalPages) * 100)
     : 0;
+  const progressStatusText = (() => {
+    if (progressSaveStatus === "loading") {
+      return "Buscando tu última página";
+    }
+
+    if (progressSaveStatus === "restored" && restoredPage) {
+      return `Continuamos en la página ${restoredPage}`;
+    }
+
+    if (progressSaveStatus === "saving") {
+      return "Guardando avance...";
+    }
+
+    if (progressSaveStatus === "local") {
+      return "Avance guardado en este dispositivo";
+    }
+
+    if (progressSaveStatus === "saved") {
+      return "Avance guardado";
+    }
+
+    return "Progreso automático activo";
+  })();
 
   function submitPage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -729,6 +1055,18 @@ export default function BookReaderClient({
             </p>
             <p className="text-xs text-slate-400">
               {totalPages ? `${totalPages} páginas` : "Preparando libro"}
+              <span className="mx-1.5 text-slate-600">·</span>
+              <span
+                className={
+                  progressSaveStatus === "restored"
+                    ? "font-bold text-emerald-400"
+                    : progressSaveStatus === "local"
+                      ? "text-amber-300"
+                      : "text-slate-400"
+                }
+              >
+                {progressStatusText}
+              </span>
             </p>
           </div>
 
