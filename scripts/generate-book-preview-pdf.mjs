@@ -10,9 +10,8 @@ const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, "..");
 
 const PREVIEW_BUCKET = "book-previews";
-const DEFAULT_PAGES = 17;
+const PREVIEW_PAGE_COUNT = 25;
 const DEFAULT_SCALE = 5200;
-const MAX_PAGES = 50;
 
 const pdfConvert =
   pdfPoppler?.convert ?? pdfPoppler?.default?.convert ?? null;
@@ -174,7 +173,7 @@ async function findPdfAsset(supabase, bookId) {
       "id, asset_type, storage_bucket, storage_path, file_url, mime_type, sort_order"
     )
     .eq("book_id", bookId)
-    .in("asset_type", ["pdf", "manuscript"])
+    .in("asset_type", ["pdf", "manuscript", "manuscript_pdf"])
     .order("sort_order", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -506,17 +505,13 @@ function parseCliOptions() {
   const slug = getArg("slug");
   const bookId = getArg("book-id");
 
-  const rawPages = Number(getArg("pages", String(DEFAULT_PAGES)));
   const rawScale = Number(getArg("scale", String(DEFAULT_SCALE)));
-
-  const pages = Number.isFinite(rawPages)
-    ? Math.min(Math.max(Math.floor(rawPages), 1), MAX_PAGES)
-    : DEFAULT_PAGES;
+  const pages = PREVIEW_PAGE_COUNT;
 
   const scale =
     Number.isFinite(rawScale) && rawScale > 0 ? rawScale : DEFAULT_SCALE;
 
-  const includeCover = !hasFlag("no-cover");
+  const includeCover = false;
 
   return {
     slug,
@@ -628,7 +623,7 @@ async function main() {
     bookId: book.id,
     status: "ready",
     errorMessage: null,
-    pageCount: pages,
+    pageCount: renderedPaths.length,
   });
 
   console.log("");

@@ -759,9 +759,9 @@ export default function NewBookForm() {
             </h1>
 
             <p className="max-w-3xl text-sm leading-6 text-slate-600">
-              Crea la ficha tipo Amazon/KDP, sube portada, PDF principal y EPUB
-              preview. El preview se leerá dentro de la plataforma sin entregar
-              el archivo completo.
+              Crea la ficha, sube la portada y el PDF principal. La plataforma
+              preparará una muestra protegida de las primeras 25 páginas sin
+              entregar el archivo completo.
             </p>
           </div>
 
@@ -801,8 +801,8 @@ export default function NewBookForm() {
         noValidate
       >
         <input type="hidden" name="preview_mode" value="pdf_images" />
-        <input type="hidden" name="preview_page_count" value="1" />
-        <input type="hidden" name="preview_include_cover" value="true" />
+        <input type="hidden" name="preview_page_count" value="25" />
+        <input type="hidden" name="preview_include_cover" value="false" />
         <input type="hidden" name="preview_layout" value="epub_reader" />
         <input type="hidden" name="preview_progress_enabled" value="true" />
 
@@ -1057,18 +1057,18 @@ export default function NewBookForm() {
         </section>
 
         <section className={sectionClassName}>
-          <h2 className={sectionTitleClassName}>Vista previa EPUB</h2>
+          <h2 className={sectionTitleClassName}>Vista previa de 25 páginas</h2>
 
           <div className="grid gap-4 md:grid-cols-4">
             <PreviewInfoCard
-              title="Preview"
-              value="EPUB separado"
-              text="No se usa el libro completo como muestra."
+              title="Muestra"
+              value="25 páginas"
+              text="Se genera desde el PDF principal."
             />
 
             <PreviewInfoCard
               title="Completo"
-              value="EPUB privado"
+              value="PDF privado"
               text="Solo dueño o comprador."
             />
 
@@ -1086,8 +1086,8 @@ export default function NewBookForm() {
           </div>
 
           <div className="mt-4 rounded-3xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-900">
-            Sube dos EPUB: uno completo y otro recortado para muestra. El EPUB
-            preview debe incluir solo portada, introducción y primeros capítulos.
+            La muestra queda fijada en las primeras 25 páginas. El PDF completo
+            continúa privado y solo se habilita después de la compra.
           </div>
         </section>
 

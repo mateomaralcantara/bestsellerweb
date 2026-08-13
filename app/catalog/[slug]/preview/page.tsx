@@ -4,6 +4,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
+const PREVIEW_PAGE_LIMIT = 25;
+
 type PreviewPageProps = {
   params: {
     slug: string;
@@ -74,9 +76,10 @@ export default async function CatalogPreviewPage({ params }: PreviewPageProps) {
     .from("book_preview_pages")
     .select("id, page_index, page_number, image_path, image_url, storage_bucket, storage_path, width, height")
     .eq("book_id", book.id)
-    .order("page_index", { ascending: true });
+    .order("page_index", { ascending: true })
+    .limit(PREVIEW_PAGE_LIMIT);
 
-  const previewPages = pages || [];
+  const previewPages = (pages || []).slice(0, PREVIEW_PAGE_LIMIT);
 
   const signedPages = await Promise.all(
     previewPages.map(async (page) => ({
@@ -107,7 +110,7 @@ export default async function CatalogPreviewPage({ params }: PreviewPageProps) {
             </span>
 
             <span className="rounded-full bg-white/10 px-3 py-1">
-              Páginas: {signedPages.length}
+              Muestra: {signedPages.length} de {PREVIEW_PAGE_LIMIT} páginas
             </span>
           </div>
 

@@ -12,6 +12,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# La muestra pública siempre tiene 25 páginas.
+$Pages = 25
+
 $ProjectRoot = Resolve-Path "$PSScriptRoot\.."
 Set-Location $ProjectRoot
 

@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic";
 const COVER_BUCKET = "book-covers";
 const FILE_BUCKET = "book-files";
 const PREVIEW_BUCKET = "book-previews";
+const PREVIEW_PAGE_COUNT = 25;
 
 const MAX_COVER_SIZE_MB = 10;
 const MAX_PDF_SIZE_MB = 250;
@@ -621,6 +622,7 @@ async function markPreviewPendingFromPdf(book: OwnedBook) {
     payload: {
       preview_mode: "pdf_images",
       preview_status: "pending",
+      preview_page_count: PREVIEW_PAGE_COUNT,
       preview_error: null,
       preview_generated_at: null,
       updated_at: new Date().toISOString(),
@@ -1051,7 +1053,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         status: changedManuscriptPdf ? "pending" : null,
         needsRegeneration: changedManuscriptPdf,
         command: changedManuscriptPdf
-          ? `npm run preview:book -- --slug ${book.slug} --pages 16 --scale 5200`
+          ? `npm run preview:book -- --slug ${book.slug} --pages ${PREVIEW_PAGE_COUNT} --scale 5200`
           : null,
       },
     });

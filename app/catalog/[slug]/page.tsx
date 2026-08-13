@@ -113,6 +113,7 @@ type PreviewPageRecord = {
 };
 
 const PREVIEW_BUCKET = "book-previews";
+const PREVIEW_PAGE_LIMIT = 25;
 
 const BOOK_SELECT = `
   id,
@@ -389,7 +390,8 @@ async function getPreviewPages(bookId: string): Promise<LookInsidePreviewPage[]>
       "id, page_index, source_page_number, kind, image_url, image_path, width, height"
     )
     .eq("book_id", bookId)
-    .order("page_index", { ascending: true });
+    .order("page_index", { ascending: true })
+    .limit(PREVIEW_PAGE_LIMIT);
 
   if (error) {
     console.error("Error cargando páginas de muestra:", error.message);
@@ -397,6 +399,7 @@ async function getPreviewPages(bookId: string): Promise<LookInsidePreviewPage[]>
   }
 
   return ((data ?? []) as PreviewPageRecord[])
+    .slice(0, PREVIEW_PAGE_LIMIT)
     .map((page): LookInsidePreviewPage | null => {
       const imageUrl =
         cleanText(page.image_url) ||

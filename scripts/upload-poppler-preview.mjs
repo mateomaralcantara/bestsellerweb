@@ -122,7 +122,7 @@ async function findBook(supabase, bookkey) {
 async function main() {
   const bookkey = requireArg("slug");
   const imagesDir = path.resolve(requireArg("images-dir"));
-  const pagesLimit = Number(getArg("pages", "25"));
+  const pagesLimit = 25;
 
   if (!fs.existsSync(imagesDir)) {
     throw new Error(`No existe la carpeta de imagenes: ${imagesDir}`);

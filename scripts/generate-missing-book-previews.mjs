@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, "..");
+const PREVIEW_PAGE_COUNT = 25;
 
 function loadEnvFile(fileName) {
   const filePath = path.join(ROOT_DIR, fileName);
@@ -87,7 +88,7 @@ async function getReadableAsset(supabase, bookId) {
     .from("book_assets")
     .select("asset_type, storage_bucket, storage_path, file_url, mime_type, sort_order")
     .eq("book_id", bookId)
-    .in("asset_type", ["pdf", "manuscript"])
+    .in("asset_type", ["pdf", "manuscript", "manuscript_pdf"])
     .order("sort_order", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -116,12 +117,14 @@ async function getBooks(supabase) {
 }
 
 function runPreviewCommand({ slug, pages, scale }) {
-  const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+  const previewScript = path.join(
+    ROOT_DIR,
+    "scripts",
+    "generate-book-preview.mjs"
+  );
 
   const args = [
-    "run",
-    "preview:book",
-    "--",
+    previewScript,
     "--slug",
     slug,
     "--pages",
@@ -132,10 +135,10 @@ function runPreviewCommand({ slug, pages, scale }) {
 
   console.log("");
   console.log(`Generando preview para: ${slug}`);
-  console.log(`${npmCommand} ${args.join(" ")}`);
+  console.log(`${process.execPath} ${args.join(" ")}`);
   console.log("");
 
-  const result = spawnSync(npmCommand, args, {
+  const result = spawnSync(process.execPath, args, {
     cwd: ROOT_DIR,
     encoding: "utf8",
     shell: false,
@@ -168,7 +171,7 @@ function runPreviewCommand({ slug, pages, scale }) {
 async function main() {
   const supabase = getSupabase();
 
-  const pages = Number(getArg("pages", "16"));
+  const pages = PREVIEW_PAGE_COUNT;
   const scale = Number(getArg("scale", "5200"));
   const force = hasFlag("force");
 
@@ -193,7 +196,7 @@ async function main() {
       `${book.title} | ${book.slug} | status=${book.status} | preview_pages=${previewCount}`
     );
 
-    if (!force && previewCount > 0) {
+    if (!force && previewCount === PREVIEW_PAGE_COUNT) {
       skipped += 1;
       continue;
     }
@@ -258,6 +261,10 @@ async function main() {
   }
 
   console.log("");
+
+  if (failed.length > 0) {
+    process.exitCode = 1;
+  }
 }
 
 main().catch((error) => {

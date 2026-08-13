@@ -37,6 +37,8 @@ type LookInsidePreviewProps = {
   chapterOneExcerpt?: string | null;
 };
 
+const PREVIEW_PAGE_LIMIT = 25;
+
 type ViewMode = "single" | "double";
 
 type VisualSpread = {
@@ -59,7 +61,8 @@ function cleanText(value?: string | null) {
 function getValidPages(pages: LookInsidePreviewPage[]) {
   return [...pages]
     .filter((page) => Boolean(page.imageUrl))
-    .sort((a, b) => a.pageIndex - b.pageIndex);
+    .sort((a, b) => a.pageIndex - b.pageIndex)
+    .slice(0, PREVIEW_PAGE_LIMIT);
 }
 
 function getFallbackPages(params: {
@@ -349,7 +352,7 @@ export function LookInsidePreview({
         className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-800 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <BookOpen className="h-5 w-5" />
-        Leer fragmento
+        Leer muestra de 25 páginas
       </button>
 
       {open ? (

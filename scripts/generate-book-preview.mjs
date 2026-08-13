@@ -13,8 +13,8 @@ const SUPABASE_URL =
 
 const SUPABASE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_SERVICE_ROLE ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  process.env.SUPABASE_SECRET_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE;
 
 const PDF_SCRIPT = path.join(ROOT, "scripts", "generate-book-preview-pdf.mjs");
 
@@ -88,10 +88,10 @@ function runPdfPreviewScript() {
   });
 }
 
-function getAsset(assets, type) {
+function getAsset(assets, ...types) {
   return assets.find(
     (asset) =>
-      asset.asset_type === type &&
+      types.includes(asset.asset_type) &&
       asset.storage_bucket &&
       asset.storage_path
   );
@@ -182,7 +182,7 @@ async function main() {
 
   const list = assets || [];
 
-  const pdfAsset = getAsset(list, "pdf");
+  const pdfAsset = getAsset(list, "pdf", "manuscript", "manuscript_pdf");
   const epubAsset = getAsset(list, "epub");
   const epubPreviewAsset = getAsset(list, "epub_preview");
 

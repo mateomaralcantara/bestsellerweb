@@ -10,8 +10,7 @@ const COVER_BUCKET = "book-covers";
 const FILE_BUCKET = "book-files";
 
 const SHORT_DESCRIPTION_LIMIT = 180;
-const DEFAULT_PREVIEW_PAGE_COUNT = 17;
-const MAX_PREVIEW_PAGE_COUNT = 50;
+const PREVIEW_PAGE_COUNT = 25;
 
 const MAX_COVER_SIZE_MB = 10;
 const MAX_BOOK_SIZE_MB = 100;
@@ -184,15 +183,8 @@ function parseKeywords(value: string): string[] {
     .slice(0, 12);
 }
 
-function parsePreviewPageCount(formData: FormData): number {
-  const raw = readTextField(formData, "preview_page_count");
-  const parsed = raw ? Number(raw) : DEFAULT_PREVIEW_PAGE_COUNT;
-
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    return DEFAULT_PREVIEW_PAGE_COUNT;
-  }
-
-  return Math.min(Math.floor(parsed), MAX_PREVIEW_PAGE_COUNT);
+function parsePreviewPageCount(_formData: FormData): number {
+  return PREVIEW_PAGE_COUNT;
 }
 
 function parsePreviewMode(formData: FormData): PreviewMode {
@@ -988,16 +980,14 @@ function buildPreviewCommand(params: {
     return null;
   }
 
-  if (params.bookAssetType !== "pdf") {
+  if (
+    params.bookAssetType !== "pdf" &&
+    params.bookAssetType !== "manuscript_pdf"
+  ) {
     return null;
   }
 
-  const pages = Math.min(
-    params.form.previewPageCount || DEFAULT_PREVIEW_PAGE_COUNT,
-    MAX_PREVIEW_PAGE_COUNT
-  );
-
-  return `npm run preview:book -- --slug ${params.slug} --pages ${pages} --scale 5200`;
+  return `npm run preview:book -- --slug ${params.slug} --pages ${PREVIEW_PAGE_COUNT} --scale 5200`;
 }
 
 export async function POST(request: Request) {

@@ -23,7 +23,7 @@
     "preview:missing": "node scripts/generate-missing-book-previews.mjs",
     "env:vercel": "node scripts/list-vercel-env.mjs",
     "verify:epub-preview": "node scripts/verify-epub-preview.mjs",
-    "preview:book": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/generate-book-preview.ps1"
+    "preview:book:local-pdf": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/generate-book-preview.ps1"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.0",
