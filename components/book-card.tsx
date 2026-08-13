@@ -71,6 +71,7 @@ export function BookCard({ book }: BookCardProps) {
   const reviewCount = typeof book.review_count === "number" ? book.review_count : 0;
   const price = typeof book.price === "number" ? book.price : null;
   const compareAtPrice = typeof book.compare_at_price === "number" ? book.compare_at_price : null;
+  const priceCurrency = book.currency || "USD";
   const catalogUrl = `/catalog/${book.slug}`;
 
   const cardSummary = useMemo(() => truncateText(shortDescription), [shortDescription]);
@@ -130,12 +131,14 @@ export function BookCard({ book }: BookCardProps) {
         <div className="text-right">
           {compareAtPrice !== null ? (
             <p className="text-xs text-slate-400 line-through">
-              {currency(compareAtPrice)}
+              {currency(compareAtPrice, priceCurrency)}
             </p>
           ) : null}
 
           <p className="text-lg font-bold text-slate-950">
-            {price !== null ? currency(price) : "Consultar"}
+            {price !== null
+              ? currency(price, priceCurrency)
+              : "Precio no disponible"}
           </p>
         </div>
       </div>
