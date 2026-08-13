@@ -19,6 +19,11 @@ const dashboardLinks = [
     description: "Inventario activo",
   },
   {
+    href: "/dashboard/books/purchased",
+    label: "Libros comprados",
+    description: "Tu biblioteca de lectura",
+  },
+  {
     href: "/categories",
     label: "Categorías",
     description: "Vista pública",
@@ -42,15 +47,18 @@ export default async function DashboardLayout({
 }) {
   const access = await getAdminAccess();
   const visibleLinks = access.isAdmin
-    ? [
-        ...dashboardLinks.slice(0, 1),
-        {
-          href: "/dashboard/purchases",
-          label: "Compras activas",
-          description: "Usuarios y libros adquiridos",
-        },
-        ...dashboardLinks.slice(1),
-      ]
+    ? dashboardLinks.flatMap((item) =>
+        item.href === "/dashboard/books/purchased"
+          ? [
+              item,
+              {
+                href: "/dashboard/purchases",
+                label: "Registro de compras",
+                description: "Compras activas por usuario",
+              },
+            ]
+          : [item]
+      )
     : dashboardLinks;
 
   return (

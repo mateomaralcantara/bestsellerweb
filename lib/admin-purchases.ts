@@ -26,7 +26,6 @@ type PurchaseRecord = {
 type ProfileRecord = {
   id: string;
   full_name: string | null;
-  email: string | null;
 };
 
 type BookRecord = {
@@ -63,8 +62,43 @@ function unique(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => Boolean(value)))];
 }
 
-export async function getActivePurchaseRows(): Promise<ActivePurchaseRow[]> {
-  const { data: purchases, error: purchaseError } = await supabaseAdmin
+async function loadAuthEmails(userIds: string[]) {
+  const emailsByUserId = new Map<string, string>();
+  const batchSize = 10;
+
+  for (let index = 0; index < userIds.length; index += batchSize) {
+    const batch = userIds.slice(index, index + batchSize);
+    const results = await Promise.all(
+      batch.map(async (userId) => {
+        try {
+          const { data, error } = await supabaseAdmin.auth.admin.getUserById(
+            userId
+          );
+
+          if (error || !data.user?.email) return null;
+
+          return {
+            userId,
+            email: data.user.email.trim(),
+          };
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    for (const result of results) {
+      if (result) emailsByUserId.set(result.userId, result.email);
+    }
+  }
+
+  return emailsByUserId;
+}
+
+export async function getActivePurchaseRows(options?: {
+  userId?: string;
+}): Promise<ActivePurchaseRow[]> {
+  let purchaseQuery = supabaseAdmin
     .from("book_purchases")
     .select(
       "id, user_id, book_id, status, payment_provider, payment_reference, provider_order_id, amount_paid, currency, paid_at, created_at"
@@ -72,8 +106,14 @@ export async function getActivePurchaseRows(): Promise<ActivePurchaseRow[]> {
     .in("status", [...ACTIVE_PURCHASE_STATUSES])
     .is("revoked_at", null)
     .order("paid_at", { ascending: false, nullsFirst: false })
-    .limit(5000)
-    .returns<PurchaseRecord[]>();
+    .limit(5000);
+
+  if (options?.userId) {
+    purchaseQuery = purchaseQuery.eq("user_id", options.userId);
+  }
+
+  const { data: purchases, error: purchaseError } =
+    await purchaseQuery.returns<PurchaseRecord[]>();
 
   if (purchaseError) {
     throw new Error(`No se pudieron cargar las compras: ${purchaseError.message}`);
@@ -91,10 +131,11 @@ export async function getActivePurchaseRows(): Promise<ActivePurchaseRow[]> {
     purchaseList.map((purchase) => purchase.provider_order_id)
   );
 
-  const [profilesResult, booksResult, paypalResult] = await Promise.all([
+  const [profilesResult, booksResult, paypalResult, authEmailsByUserId] =
+    await Promise.all([
     supabaseAdmin
       .from("profiles")
-      .select("id, full_name, email")
+      .select("id, full_name")
       .in("id", userIds)
       .returns<ProfileRecord[]>(),
 
@@ -111,6 +152,8 @@ export async function getActivePurchaseRows(): Promise<ActivePurchaseRow[]> {
           .in("paypal_order_id", orderIds)
           .returns<PayPalOrderRecord[]>()
       : Promise.resolve({ data: [] as PayPalOrderRecord[], error: null }),
+
+    loadAuthEmails(userIds),
   ]);
 
   if (profilesResult.error) {
@@ -149,7 +192,10 @@ export async function getActivePurchaseRows(): Promise<ActivePurchaseRow[]> {
     const payerEmail = purchase.provider_order_id
       ? payerEmailsByOrderId.get(purchase.provider_order_id)
       : null;
-    const email = profile?.email?.trim() || payerEmail?.trim() || null;
+    const email =
+      authEmailsByUserId.get(purchase.user_id) ||
+      payerEmail?.trim() ||
+      null;
 
     return {
       id: purchase.id,

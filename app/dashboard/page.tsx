@@ -1,7 +1,12 @@
 import Link from "next/link";
-import { BookText, Tags, UserRound } from "lucide-react";
+import { BookText, LibraryBig, Tags, UserRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import PublishedBookCard from "@/components/dashboard/PublishedBookCard";
+import PurchasedBookCard from "@/components/dashboard/PurchasedBookCard";
+import {
+  getActivePurchaseRows,
+  type ActivePurchaseRow,
+} from "@/lib/admin-purchases";
 
 export const dynamic = "force-dynamic";
 
@@ -106,7 +111,20 @@ export default async function DashboardPage() {
     );
   }
 
-  const [profileResult, booksResult] = await Promise.all([
+  const purchasesPromise: Promise<{
+    data: ActivePurchaseRow[];
+    error: string | null;
+  }> = getActivePurchaseRows({ userId: user.id })
+    .then((data) => ({ data, error: null }))
+    .catch((error: unknown) => ({
+      data: [],
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudieron cargar los libros comprados.",
+    }));
+
+  const [profileResult, booksResult, purchasesResult] = await Promise.all([
     supabase
       .from("profiles_with_roles")
       .select("id, full_name, roles")
@@ -131,6 +149,8 @@ export default async function DashboardPage() {
       .eq("owner_user_id", user.id)
       .order("created_at", { ascending: false })
       .returns<PublishedBook[]>(),
+
+    purchasesPromise,
   ]);
 
   if (profileResult.error) {
@@ -153,6 +173,7 @@ export default async function DashboardPage() {
 
   const profileData = profileResult.data ?? null;
   const books = booksResult.data ?? [];
+  const purchasedBooks = purchasesResult.data;
 
   const profile = {
     id: user.id,
@@ -181,7 +202,8 @@ export default async function DashboardPage() {
           </h1>
 
           <p className="mt-3 text-slate-700">
-            Estos son tus libros publicados con sus categorías editoriales.
+            Tus publicaciones y tus libros comprados, juntos y listos para
+            gestionar o leer.
           </p>
         </div>
 
@@ -190,11 +212,17 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="mt-8 grid gap-5 md:grid-cols-3">
+      <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon={<BookText className="h-5 w-5" />}
           label="Libros publicados"
           value={books.length}
+        />
+
+        <StatCard
+          icon={<LibraryBig className="h-5 w-5" />}
+          label="Libros comprados"
+          value={purchasedBooks.length}
         />
 
         <StatCard
@@ -210,39 +238,83 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <section className="mt-10">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-black text-slate-950">
-              Tus libros publicados
-            </h2>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Cada tarjeta debe mostrar nicho, categoría, subcategoría y
-              palabras clave.
-            </p>
-          </div>
-
-          <Link
-            href="/dashboard/books/new"
-            className="rounded-xl bg-black px-4 py-2 text-sm font-bold text-white transition hover:opacity-90"
-          >
-            Subir nuevo libro
-          </Link>
+      {purchasesResult.error ? (
+        <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">
+          <strong>No se pudo cargar tu biblioteca:</strong>{" "}
+          {purchasesResult.error}
         </div>
+      ) : null}
 
-        {books.length === 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-600">
-            No tienes libros publicados todavía.
+      <div className="mt-10 grid gap-10 xl:grid-cols-2">
+        <section>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-black text-slate-950">
+                Tus libros publicados
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Libros que publicaste y administras como autor.
+              </p>
+            </div>
+
+            <Link
+              href="/dashboard/books/published"
+              className="rounded-xl bg-black px-4 py-2 text-sm font-bold text-white transition hover:opacity-90"
+            >
+              Ver publicados
+            </Link>
           </div>
-        ) : (
-          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-            {books.map((book) => (
-              <PublishedBookCard key={book.id} book={book} />
-            ))}
+
+          {books.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-600">
+              No tienes libros publicados todavía.
+            </div>
+          ) : (
+            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+              {books.slice(0, 4).map((book) => (
+                <PublishedBookCard key={book.id} book={book} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-black text-slate-950">
+                Tus libros comprados
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Pagos confirmados disponibles para lectura completa.
+              </p>
+            </div>
+
+            <Link
+              href="/dashboard/books/purchased"
+              className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-800"
+            >
+              Ver comprados
+            </Link>
           </div>
-        )}
-      </section>
+
+          {!purchasesResult.error && purchasedBooks.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-600">
+              No hay compras activas asociadas a esta cuenta.
+            </div>
+          ) : (
+            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+              {purchasedBooks.slice(0, 4).map((purchase) => (
+                <PurchasedBookCard
+                  key={purchase.id}
+                  purchase={purchase}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
     </main>
   );
 }
