@@ -769,7 +769,7 @@ export default function BookReaderClient({
 
         localDoc = doc;
 
-        const detectedEndPage = await detectChapterOneEndPage(doc);
+        const detectedEndPage = doc.numPages;
 
         if (cancelled) {
           await doc.destroy();
@@ -888,11 +888,7 @@ export default function BookReaderClient({
 
   const progressLabel = isCoverView
     ? "Portada"
-    : `Vista previa: Introducción + Capítulo 1 (hasta la página ${Math.min(
-        dynamicEndPage,
-        totalPdfPages || dynamicEndPage
-      )})`;
-
+    : `Lectura completa · ${totalPdfPages} páginas`;
   return (
     <section className="w-full px-4 py-6">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 pb-4">

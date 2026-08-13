@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 type RouteContext = {
   params: {
-    slug: string;
+    bookkey: string;
   };
 };
 
@@ -27,7 +27,11 @@ function getSafeSlug(value: string) {
 function getContentType(mimeType: string | null, assetType: string | null) {
   if (mimeType?.trim()) return mimeType;
 
-  if (assetType === "pdf" || assetType === "manuscript") {
+  if (
+    assetType === "pdf" ||
+    assetType === "manuscript" ||
+    assetType === "manuscript_pdf"
+  ) {
     return "application/pdf";
   }
 
@@ -46,7 +50,7 @@ function getFileName(title: string) {
 
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
-    const slug = getSafeSlug(params.slug);
+    const slug = getSafeSlug(params.bookkey);
 
     if (!slug) {
       return jsonError("Slug inválido.", 400);
@@ -112,7 +116,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
       },
     });
   } catch (error) {
-    console.error("GET /api/books/[slug]/read error:", error);
+    console.error("GET /api/books/[bookkey]/read error:", error);
 
     return jsonError("Error interno cargando el libro.", 500);
   }

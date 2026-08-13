@@ -94,16 +94,25 @@ export async function POST(request: Request) {
       localOrder.status === "completed" &&
       localOrder.paypal_capture_id
     ) {
+      await grantBookPurchase({
+        userId: localOrder.user_id,
+        bookId: localOrder.book_id,
+        amount: Number(localOrder.amount).toFixed(2),
+        currency: localOrder.currency,
+        paypalOrderId: localOrder.paypal_order_id,
+        paypalCaptureId: localOrder.paypal_capture_id,
+      });
+
       return NextResponse.json({
         ok: true,
         alreadyCaptured: true,
+        accessReconciled: true,
         captureId: localOrder.paypal_capture_id,
         redirectUrl: `/checkout/paypal/success?bookId=${encodeURIComponent(
           localOrder.book_id
         )}`,
       });
     }
-
     const paypalOrder = await capturePayPalOrder(
       localOrder.paypal_order_id,
       localOrder.id

@@ -1,33 +1,18 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import {
+  getPublishedBookBySlug,
+  userCanReadBook,
+} from "@/lib/book-access";
 import BookReaderClient from "./BookReaderClient";
 
 export const dynamic = "force-dynamic";
-
-const PAID_ORDER_STATUSES = ["paid", "completed", "approved", "succeeded"];
 
 type PageProps = {
   params: {
     slug: string;
   };
-};
-
-type BookRow = {
-  id: string;
-  title: string;
-  slug: string;
-  cover_url: string | null;
-  status: string;
-  owner_user_id: string | null;
-};
-
-type OrderRow = {
-  id: string;
-};
-
-type OrderItemRow = {
-  id: string;
 };
 
 function getLoginUrl(slug: string) {
@@ -36,50 +21,6 @@ function getLoginUrl(slug: string) {
 
 function getCheckoutUrl(slug: string) {
   return `/catalog/${slug}?paywall=1`;
-}
-
-async function userHasPaidBook(params: {
-  supabase: Awaited<ReturnType<typeof createClient>>;
-  bookId: string;
-  userEmail: string | null | undefined;
-}) {
-  const { supabase, bookId, userEmail } = params;
-
-  if (!userEmail) return false;
-
-  const { data: orders, error: ordersError } = await supabase
-    .from("orders")
-    .select("id")
-    .eq("email", userEmail)
-    .in("status", PAID_ORDER_STATUSES)
-    .limit(50)
-    .returns<OrderRow[]>();
-
-  if (ordersError) {
-    console.error("Error verificando órdenes pagadas:", ordersError.message);
-    return false;
-  }
-
-  const orderIds = (orders ?? [])
-    .map((order) => order.id)
-    .filter(Boolean);
-
-  if (orderIds.length === 0) return false;
-
-  const { data: orderItem, error: itemError } = await supabase
-    .from("order_items")
-    .select("id")
-    .eq("book_id", bookId)
-    .in("order_id", orderIds)
-    .limit(1)
-    .maybeSingle<OrderItemRow>();
-
-  if (itemError) {
-    console.error("Error verificando item comprado:", itemError.message);
-    return false;
-  }
-
-  return Boolean(orderItem);
 }
 
 export default async function ReaderPage({ params }: PageProps) {
@@ -100,28 +41,21 @@ export default async function ReaderPage({ params }: PageProps) {
     redirect(getLoginUrl(slug));
   }
 
-  const { data: book, error: bookError } = await supabase
-    .from("books")
-    .select("id, title, slug, cover_url, status, owner_user_id")
-    .eq("slug", slug)
-    .eq("status", "published")
-    .maybeSingle<BookRow>();
+  const book = await getPublishedBookBySlug(slug);
 
-  if (bookError || !book) {
+  if (!book) {
     notFound();
   }
 
-  const isOwner = book.owner_user_id === user.id;
+  const canRead = await userCanReadBook({
+    user: {
+      id: user.id,
+      email: user.email,
+    },
+    book,
+  });
 
-  const hasPaid = isOwner
-    ? true
-    : await userHasPaidBook({
-        supabase,
-        bookId: book.id,
-        userEmail: user.email,
-      });
-
-  if (!hasPaid) {
+  if (!canRead) {
     redirect(getCheckoutUrl(book.slug));
   }
 
@@ -130,7 +64,7 @@ export default async function ReaderPage({ params }: PageProps) {
       <div className="mx-auto mb-4 flex max-w-6xl items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-[0.24em] text-slate-500">
-            Lector
+            Libro adquirido
           </p>
 
           <h1 className="mt-1 truncate text-2xl font-bold text-slate-950">
@@ -149,7 +83,7 @@ export default async function ReaderPage({ params }: PageProps) {
       <BookReaderClient
         title={book.title}
         coverUrl={book.cover_url}
-        pdfUrl={`/api/books/${book.slug}/read`}
+        pdfUrl={`/api/books/${encodeURIComponent(book.slug)}/read`}
       />
     </main>
   );

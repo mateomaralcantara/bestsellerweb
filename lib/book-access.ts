@@ -7,7 +7,7 @@ export const PAID_ACCESS_STATUSES = [
   "succeeded",
 ] as const;
 
-const READABLE_ASSET_TYPES = ["pdf", "manuscript"] as const;
+const READABLE_ASSET_TYPES = ["manuscript_pdf", "pdf", "manuscript"] as const;
 
 export type BookAccessUser = {
   id: string;
@@ -152,12 +152,5 @@ export async function userCanReadBook(params: {
     bookId: book.id,
   });
 
-  if (hasDirectPurchase) {
-    return true;
-  }
-
-  return userHasPaidOrderFallback({
-    userEmail: user.email,
-    bookId: book.id,
-  });
+  return hasDirectPurchase;
 }
