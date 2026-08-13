@@ -36,7 +36,7 @@ type BookReaderClientProps = {
 };
 
 type ViewMode = "single" | "spread";
-type FitMode = "page" | "width" | "custom";
+type FitMode = "page" | "width";
 type ProgressSaveStatus =
   | "loading"
   | "ready"
@@ -73,7 +73,6 @@ type DragState = {
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.25;
-const CUSTOM_BASE_SCALE = 1.25;
 const TOOLBAR_HEIGHT_ALLOWANCE = 64;
 const PROGRESS_SAVE_DELAY = 750;
 
@@ -163,18 +162,12 @@ function getPageScale(params: {
 
   const baseViewport = page.getViewport({ scale: 1, rotation });
 
-  if (fitMode === "custom") {
-    return CUSTOM_BASE_SCALE * zoom;
-  }
-
   const widthScale = Math.max(0.1, availableWidth / baseViewport.width);
-
-  if (fitMode === "width") {
-    return widthScale;
-  }
-
   const heightScale = Math.max(0.1, availableHeight / baseViewport.height);
-  return Math.min(widthScale, heightScale);
+  const fittedScale =
+    fitMode === "width" ? widthScale : Math.min(widthScale, heightScale);
+
+  return Math.max(0.1, fittedScale * zoom);
 }
 
 function PdfPageCanvas({
@@ -618,7 +611,6 @@ export default function BookReaderClient({
   }, [currentPage, pageStep, setSafePage]);
 
   const changeZoom = useCallback((delta: number) => {
-    setFitMode("custom");
     setZoom((current) =>
       clamp(Number((current + delta).toFixed(2)), MIN_ZOOM, MAX_ZOOM)
     );
@@ -1040,7 +1032,7 @@ export default function BookReaderClient({
       ].join(" ")}
     >
       <header className="relative z-40 border-b border-slate-800 bg-slate-950 text-white shadow-xl">
-        <div className="flex min-h-16 flex-wrap items-center gap-2 px-3 py-2 sm:px-4">
+        <div className="flex min-h-16 items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4">
           <ToolbarButton
             label={sidebarOpen ? "Ocultar miniaturas" : "Mostrar miniaturas"}
             active={sidebarOpen}
@@ -1049,28 +1041,66 @@ export default function BookReaderClient({
             <PanelLeft className="h-5 w-5" />
           </ToolbarButton>
 
-          <div className="mr-auto min-w-0 px-1 sm:px-2">
-            <p className="max-w-48 truncate text-sm font-black sm:max-w-sm lg:max-w-xl">
+          <div className="min-w-0 flex-1 px-1 sm:px-2">
+            <p className="truncate text-sm font-black">
               {title}
             </p>
-            <p className="text-xs text-slate-400">
+            <p className="flex min-w-0 items-center gap-1.5 text-xs text-slate-400">
+              <span className="shrink-0">
               {totalPages ? `${totalPages} páginas` : "Preparando libro"}
-              <span className="mx-1.5 text-slate-600">·</span>
+              </span>
+              <span className="shrink-0 text-slate-600">·</span>
               <span
-                className={
+                className={[
+                  "truncate",
                   progressSaveStatus === "restored"
                     ? "font-bold text-emerald-400"
                     : progressSaveStatus === "local"
                       ? "text-amber-300"
-                      : "text-slate-400"
-                }
+                      : "text-slate-400",
+                ].join(" ")}
               >
                 {progressStatusText}
               </span>
             </p>
           </div>
 
-          <div className="order-3 flex w-full items-center justify-center gap-1.5 sm:order-none sm:w-auto">
+          <div className="flex shrink-0 items-center gap-1.5">
+            <ToolbarButton
+              label={dark ? "Fondo claro" : "Fondo oscuro"}
+              onClick={() => setDark((value) => !value)}
+            >
+              {dark ? (
+                <Sun className="h-5 w-5" />
+              ) : (
+                <Moon className="h-5 w-5" />
+              )}
+            </ToolbarButton>
+
+            <ToolbarButton
+              label={
+                isFullscreen
+                  ? "Salir de pantalla completa"
+                  : "Pantalla completa"
+              }
+              active={isFullscreen}
+              onClick={() => void toggleFullscreen()}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="h-5 w-5" />
+              ) : (
+                <Maximize2 className="h-5 w-5" />
+              )}
+            </ToolbarButton>
+          </div>
+        </div>
+
+        <div
+          className="overflow-x-auto border-t border-slate-800 bg-slate-950/95 [scrollbar-width:thin]"
+          aria-label="Controles de visualización"
+        >
+          <div className="mx-auto flex min-w-max items-center gap-2 px-3 py-2 sm:px-4">
+            <div className="flex items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-900/60 p-1">
             <ToolbarButton
               label="Página anterior"
               disabled={currentPage <= 1 || loading}
@@ -1105,10 +1135,12 @@ export default function BookReaderClient({
             </ToolbarButton>
           </div>
 
-          <div className="flex items-center gap-1.5">
+            <div className="h-7 w-px bg-slate-700" />
+
+            <div className="flex items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-900/60 p-1">
             <ToolbarButton
               label="Alejar"
-              disabled={fitMode === "custom" && zoom <= MIN_ZOOM}
+              disabled={zoom <= MIN_ZOOM}
               onClick={() => changeZoom(-ZOOM_STEP)}
             >
               <ZoomOut className="h-5 w-5" />
@@ -1117,32 +1149,33 @@ export default function BookReaderClient({
             <button
               type="button"
               onClick={() => {
-                setFitMode("custom");
                 setZoom(1);
               }}
-              className="hidden h-10 min-w-[72px] rounded-xl border border-slate-700 bg-slate-900 px-2 text-xs font-black text-slate-200 hover:bg-slate-800 md:block"
+              className="h-10 min-w-[72px] rounded-xl border border-slate-700 bg-slate-950 px-2 text-xs font-black text-slate-100 transition hover:border-slate-500 hover:bg-slate-800"
               title="Restablecer zoom al 100 %"
+              aria-label="Restablecer zoom al 100 por ciento"
             >
-              {fitMode === "custom"
-                ? `${Math.round(zoom * 100)}%`
-                : fitMode === "width"
-                  ? "Ancho"
-                  : "Página"}
+              {Math.round(zoom * 100)}%
             </button>
 
             <ToolbarButton
               label="Acercar"
-              disabled={fitMode === "custom" && zoom >= MAX_ZOOM}
+              disabled={zoom >= MAX_ZOOM}
               onClick={() => changeZoom(ZOOM_STEP)}
             >
               <ZoomIn className="h-5 w-5" />
             </ToolbarButton>
           </div>
 
-          <div className="hidden items-center gap-1.5 lg:flex">
+            <div className="h-7 w-px bg-slate-700" />
+
+            <div className="flex items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-900/60 p-1">
             <button
               type="button"
-              onClick={() => setFitMode("page")}
+              onClick={() => {
+                setFitMode("page");
+                setZoom(1);
+              }}
               className={[
                 "h-10 rounded-xl border px-3 text-xs font-black transition",
                 fitMode === "page"
@@ -1155,7 +1188,10 @@ export default function BookReaderClient({
 
             <button
               type="button"
-              onClick={() => setFitMode("width")}
+              onClick={() => {
+                setFitMode("width");
+                setZoom(1);
+              }}
               className={[
                 "h-10 rounded-xl border px-3 text-xs font-black transition",
                 fitMode === "width"
@@ -1167,7 +1203,9 @@ export default function BookReaderClient({
             </button>
           </div>
 
-          <div className="hidden items-center gap-1.5 xl:flex">
+            <div className="h-7 w-px bg-slate-700" />
+
+            <div className="flex items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-900/60 p-1">
             <ToolbarButton
               label="Una página"
               active={viewMode === "single"}
@@ -1185,32 +1223,13 @@ export default function BookReaderClient({
             </ToolbarButton>
           </div>
 
-          <ToolbarButton label="Restablecer vista" onClick={resetView}>
-            <RotateCcw className="h-5 w-5" />
-          </ToolbarButton>
+            <div className="h-7 w-px bg-slate-700" />
 
-          <ToolbarButton
-            label={dark ? "Fondo claro" : "Fondo oscuro"}
-            onClick={() => setDark((value) => !value)}
-          >
-            {dark ? (
-              <Sun className="h-5 w-5" />
-            ) : (
-              <Moon className="h-5 w-5" />
-            )}
-          </ToolbarButton>
-
-          <ToolbarButton
-            label={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
-            active={isFullscreen}
-            onClick={() => void toggleFullscreen()}
-          >
-            {isFullscreen ? (
-              <Minimize2 className="h-5 w-5" />
-            ) : (
-              <Maximize2 className="h-5 w-5" />
-            )}
-          </ToolbarButton>
+            <ToolbarButton label="Restablecer vista" onClick={resetView}>
+              <RotateCcw className="h-5 w-5" />
+              <span className="hidden sm:inline">Restablecer</span>
+            </ToolbarButton>
+          </div>
         </div>
 
         <div className="h-1 bg-slate-800">
@@ -1225,7 +1244,7 @@ export default function BookReaderClient({
         <aside
           ref={sidebarRef}
           className={[
-            "absolute inset-y-0 left-0 z-30 mt-[69px] w-48 shrink-0 overflow-y-auto border-r border-slate-800 bg-slate-950 px-3 py-4 transition-transform duration-200 md:relative md:inset-auto md:mt-0",
+            "absolute inset-y-0 left-0 z-30 w-48 shrink-0 overflow-y-auto border-r border-slate-800 bg-slate-950 px-3 py-4 transition-transform duration-200 md:relative md:inset-auto",
             sidebarOpen
               ? "translate-x-0 md:block"
               : "-translate-x-full md:hidden",
@@ -1272,16 +1291,19 @@ export default function BookReaderClient({
 
         <div
           ref={stageRef}
-          onDoubleClick={() =>
-            setFitMode((current) => (current === "width" ? "page" : "width"))
-          }
+          onDoubleClick={(event) => {
+            const target = event.target as HTMLElement;
+            if (target.closest("button, input, a")) return;
+
+            setZoom((current) => (current > 1 ? 1 : 1.5));
+          }}
           onPointerDown={(event) => {
             const stage = stageRef.current;
             const target = event.target as HTMLElement;
 
             if (
               !stage ||
-              fitMode !== "custom" ||
+              zoom <= 1 ||
               target.closest("button, input, a")
             ) {
               return;
@@ -1325,7 +1347,7 @@ export default function BookReaderClient({
             dark
               ? "bg-[radial-gradient(circle_at_top,#1e293b_0%,#020617_62%)]"
               : "bg-[radial-gradient(circle_at_top,#ffffff_0%,#e2e8f0_70%)]",
-            fitMode === "custom"
+            zoom > 1
               ? isDragging
                 ? "cursor-grabbing select-none"
                 : "cursor-grab"
