@@ -120,10 +120,14 @@ a {
 }
 
 .commercial-grid {
+  background-color: #07111f;
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px);
-  background-size: 54px 54px;
+    linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px),
+    radial-gradient(circle at 78% 12%, rgba(19, 184, 232, 0.26), transparent 28rem),
+    radial-gradient(circle at 4% 90%, rgba(21, 94, 239, 0.35), transparent 32rem),
+    linear-gradient(135deg, #07111f 0%, #0c1f38 50%, #0a3762 100%);
+  background-size: 54px 54px, 54px 54px, auto, auto, auto;
 }
 
 .commercial-shine {
