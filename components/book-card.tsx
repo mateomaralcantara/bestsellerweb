@@ -4,10 +4,10 @@ import {
   BookOpen,
   ShieldCheck,
   Sparkles,
-  Star,
 } from "lucide-react";
 import { Book } from "@/lib/types";
 import { currency } from "@/lib/utils";
+import { BookSocialProof } from "@/components/books/BookSocialProof";
 
 type BookCardProps = {
   book: Book;
@@ -34,8 +34,6 @@ export function BookCard({ book }: BookCardProps) {
   const formats = Array.isArray(book.formats)
     ? book.formats.filter(Boolean).map(String).slice(0, 2)
     : [];
-  const rating =
-    typeof book.rating === "number" ? Number(book.rating.toFixed(1)) : null;
   const price = typeof book.price === "number" ? book.price : null;
   const compareAtPrice =
     typeof book.compare_at_price === "number" ? book.compare_at_price : null;
@@ -80,18 +78,18 @@ export function BookCard({ book }: BookCardProps) {
       <div className="flex flex-1 flex-col p-6">
         <div className="flex items-center justify-between gap-3 text-xs font-bold">
           <span className="text-[#155eef]">{authorName}</span>
-          {rating !== null ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-amber-700">
-              <Star className="h-3.5 w-3.5 fill-current" />
-              {rating}
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 text-emerald-700">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Compra segura
-            </span>
-          )}
+          <span className="inline-flex items-center gap-1 text-emerald-700">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Compra segura
+          </span>
         </div>
+
+        <BookSocialProof
+          rating={book.rating}
+          salesCount={book.sales_count}
+          compact
+          className="mt-3"
+        />
 
         <Link href={href}>
           <h3 className="mt-3 line-clamp-2 text-2xl font-black leading-tight tracking-[-0.025em] text-[#07111f] group-hover:text-[#155eef]">
