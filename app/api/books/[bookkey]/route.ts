@@ -6,6 +6,11 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import {
+  DEFAULT_BOOK_DISPLAY_RATING,
+  DEFAULT_BOOK_DISPLAY_SALES_COUNT,
+  mergeBookSocialProofMetadata,
+} from "@/lib/book-social-proof";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,6 +55,7 @@ type OwnedBook = {
   slug: string;
   owner_user_id: string;
   cover_url: string | null;
+  metadata: Record<string, unknown> | null;
 };
 
 type EditionRow = {
@@ -155,6 +161,32 @@ function parseRequiredPrice(formData: FormData) {
 
   if (!Number.isFinite(parsed) || parsed < 0) {
     throw new Error("El precio no es válido.");
+  }
+
+  return parsed;
+}
+
+function parseDisplayRating(formData: FormData) {
+  const value =
+    readText(formData, "display_rating") ||
+    String(DEFAULT_BOOK_DISPLAY_RATING);
+  const parsed = Number(value.replace(",", "."));
+
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 5) {
+    throw new Error("La valoración debe estar entre 0 y 5.");
+  }
+
+  return Math.round(parsed * 10) / 10;
+}
+
+function parseDisplaySalesCount(formData: FormData) {
+  const value =
+    readText(formData, "display_sales_count") ||
+    String(DEFAULT_BOOK_DISPLAY_SALES_COUNT);
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 999_999_999) {
+    throw new Error("El contador de lectores debe ser un número entero válido.");
   }
 
   return parsed;
@@ -404,7 +436,7 @@ async function getOwnedBook(bookKey: string) {
 
   let bookQuery = supabaseAdmin
     .from("books")
-    .select("id, title, slug, owner_user_id, cover_url");
+    .select("id, title, slug, owner_user_id, cover_url, metadata");
 
   bookQuery = isUuid(bookKey)
     ? bookQuery.eq("id", bookKey)
@@ -875,6 +907,8 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     const paypalCurrency = (
       readText(formData, "paypal_currency") || "USD"
     ).toUpperCase();
+    const displayRating = parseDisplayRating(formData);
+    const displaySalesCount = parseDisplaySalesCount(formData);
 
     if (paypalPrice !== null && paypalPrice <= 0) {
       return jsonError("El precio PayPal debe ser mayor que cero.", 400);
@@ -916,6 +950,10 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
       language_code: readText(formData, "language_code") || "es",
       status,
+      metadata: mergeBookSocialProofMetadata(book.metadata, {
+        rating: displayRating,
+        salesCount: displaySalesCount,
+      }),
       updated_at: now,
     };
 

@@ -2,6 +2,11 @@ import { randomUUID } from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthorPublishingAccess } from "@/lib/author-publishing-access";
+import {
+  DEFAULT_BOOK_DISPLAY_RATING,
+  DEFAULT_BOOK_DISPLAY_SALES_COUNT,
+  mergeBookSocialProofMetadata,
+} from "@/lib/book-social-proof";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -88,6 +93,8 @@ type UploadBookForm = {
   affiliateCommissionPercentage: number | null;
   downloadAllowed: boolean;
   isFeatured: boolean;
+  displayRating: number;
+  displaySalesCount: number;
 
   previewMode: PreviewMode;
   previewPageCount: number;
@@ -170,6 +177,32 @@ function parseRequiredPrice(value: string): number {
 
   if (!Number.isFinite(parsed) || parsed < 0) {
     throw new Error("El precio no es válido");
+  }
+
+  return parsed;
+}
+
+function parseDisplayRating(formData: FormData): number {
+  const value =
+    readTextField(formData, "display_rating") ||
+    String(DEFAULT_BOOK_DISPLAY_RATING);
+  const parsed = Number(value.replace(",", "."));
+
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 5) {
+    throw new Error("La valoración debe estar entre 0 y 5");
+  }
+
+  return Math.round(parsed * 10) / 10;
+}
+
+function parseDisplaySalesCount(formData: FormData): number {
+  const value =
+    readTextField(formData, "display_sales_count") ||
+    String(DEFAULT_BOOK_DISPLAY_SALES_COUNT);
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 999_999_999) {
+    throw new Error("El contador de lectores debe ser un número entero válido");
   }
 
   return parsed;
@@ -583,6 +616,8 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
   );
   const downloadAllowed = parseBooleanField(formData, "download_allowed");
   const isFeatured = parseBooleanField(formData, "is_featured");
+  const displayRating = parseDisplayRating(formData);
+  const displaySalesCount = parseDisplaySalesCount(formData);
 
   const previewMode = parsePreviewMode(formData);
   const previewPageCount = parsePreviewPageCount(formData);
@@ -701,6 +736,8 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
     affiliateCommissionPercentage,
     downloadAllowed,
     isFeatured,
+    displayRating,
+    displaySalesCount,
 
     previewMode,
     previewPageCount,
@@ -866,6 +903,11 @@ async function createBookRecord(params: {
     preview_status: preview.status,
     preview_error: preview.error,
     preview_generated_at: preview.status === "ready" ? now : null,
+
+    metadata: mergeBookSocialProofMetadata(null, {
+      rating: params.form.displayRating,
+      salesCount: params.form.displaySalesCount,
+    }),
 
     created_at: now,
     updated_at: now,
@@ -1114,6 +1156,5 @@ export async function POST(request: Request) {
     return jsonError(message, resolveErrorStatus(message));
   }
 }
-
 
 

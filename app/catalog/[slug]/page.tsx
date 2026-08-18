@@ -22,6 +22,8 @@ import {
   type LookInsidePreviewPage,
 } from "@/components/books/LookInsidePreview";
 import { CatalogPurchaseActions } from "@/components/payments/catalog-purchase-actions";
+import { BookSocialProof } from "@/components/books/BookSocialProof";
+import { getBookSocialProof } from "@/lib/book-social-proof";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -65,6 +67,7 @@ type BookRecord = {
 
   preview_status: string | null;
   preview_generated_at: string | null;
+  metadata: Record<string, unknown> | null;
 };
 
 type AuthorRecord = {
@@ -143,7 +146,8 @@ const BOOK_SELECT = `
   marketing_angle,
   language_code,
   preview_status,
-  preview_generated_at
+  preview_generated_at,
+  metadata
 `;
 
 const EDITION_SELECT = `
@@ -505,6 +509,7 @@ export default async function BookPublicPage({ params }: PageProps) {
   const categoryTrail = getCategoryTrail(book);
   const keywords = getKeywordList(book);
   const authorName = getAuthorName(author);
+  const socialProof = getBookSocialProof(book.metadata);
 
   const localPrice = edition?.price ?? null;
   const localCurrency = edition?.currency ?? null;
@@ -591,6 +596,12 @@ export default async function BookPublicPage({ params }: PageProps) {
                   </p>
                 ) : null}
               </div>
+
+              <BookSocialProof
+                rating={socialProof.rating}
+                salesCount={socialProof.salesCount}
+                className="mt-4 rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-2.5"
+              />
 
               {formattedPayPalPrice ? (
                 <p className="mt-2 text-sm font-semibold text-blue-700">

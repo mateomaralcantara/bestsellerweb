@@ -36,6 +36,7 @@ type BookForEdit = {
   meta_description: string | null;
   marketing_angle: string | null;
   language_code: string | null;
+  metadata: Record<string, unknown> | null;
 };
 
 type EditionForEdit = {
@@ -79,7 +80,8 @@ const BOOK_FOR_EDIT_SELECT = `
   meta_title,
   meta_description,
   marketing_angle,
-  language_code
+  language_code,
+  metadata
 ` as const;
 
 const EDITION_FOR_EDIT_SELECT = `

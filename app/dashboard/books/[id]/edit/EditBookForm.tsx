@@ -10,6 +10,7 @@ import type { FormEvent, ReactNode } from "react";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { getBookSocialProof } from "@/lib/book-social-proof";
 
 type BookForEdit = {
   id: string;
@@ -38,6 +39,7 @@ type BookForEdit = {
   language_code: string | null;
   featured?: boolean | null;
   is_featured?: boolean | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 type EditionForEdit = {
@@ -407,6 +409,7 @@ function StatusMessage({ status }: { status: SubmitState }) {
 
 export default function EditBookForm({ book, edition }: EditBookFormProps) {
   const router = useRouter();
+  const socialProof = getBookSocialProof(book.metadata);
 
   const [selectedNiche, setSelectedNiche] = useState(book.primary_niche ?? "");
   const [selectedCategory, setSelectedCategory] = useState(
@@ -432,6 +435,12 @@ export default function EditBookForm({ book, edition }: EditBookFormProps) {
     const paypalPriceText = readText(formData, "paypal_price");
     const compareAtPrice = readText(formData, "compare_at_price");
     const pageCount = readText(formData, "page_count");
+    const displayRating = Number(
+      readText(formData, "display_rating").replace(",", ".")
+    );
+    const displaySalesCount = Number(
+      readText(formData, "display_sales_count")
+    );
     const affiliateCommission = readText(
       formData,
       "affiliate_commission_percentage"
@@ -459,6 +468,18 @@ export default function EditBookForm({ book, edition }: EditBookFormProps) {
 
     if (compareAtPrice && parsePrice(compareAtPrice) === null) {
       return "El precio anterior no es válido.";
+    }
+
+    if (
+      !Number.isFinite(displayRating) ||
+      displayRating < 0 ||
+      displayRating > 5
+    ) {
+      return "La valoración debe estar entre 0 y 5.";
+    }
+
+    if (!Number.isInteger(displaySalesCount) || displaySalesCount < 0) {
+      return "El contador de lectores debe ser un número entero válido.";
     }
 
     if (pageCount) {
@@ -933,6 +954,56 @@ export default function EditBookForm({ book, edition }: EditBookFormProps) {
             </p>
           </div>
 
+          <div className="mt-5 rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-sm font-black text-amber-950">
+                  Valoración y alcance mostrado
+                </p>
+                <p className="mt-1 text-xs leading-5 text-amber-900/80">
+                  Puedes modificar ambos valores. Permanecen separados de las
+                  compras confirmadas por PayPal.
+                </p>
+              </div>
+              <span className="text-lg tracking-[0.12em] text-amber-400" aria-hidden="true">
+                ★★★★★
+              </span>
+            </div>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <label className={labelClassName}>
+                <span>Valoración mostrada (0 a 5)</span>
+                <input
+                  name="display_rating"
+                  type="number"
+                  min="0"
+                  max="5"
+                  step="0.1"
+                  defaultValue={socialProof.rating}
+                  required
+                  disabled={isSubmitting}
+                  className={inputClassName}
+                  inputMode="decimal"
+                />
+              </label>
+
+              <label className={labelClassName}>
+                <span>Lectores mostrados</span>
+                <input
+                  name="display_sales_count"
+                  type="number"
+                  min="0"
+                  step="1"
+                  defaultValue={socialProof.salesCount}
+                  required
+                  disabled={isSubmitting}
+                  className={inputClassName}
+                  inputMode="numeric"
+                />
+              </label>
+            </div>
+          </div>
+
           <div className="mt-5 grid gap-5 md:grid-cols-3">
             <label className={labelClassName}>
               <span>Formato principal</span>
@@ -1128,5 +1199,4 @@ export default function EditBookForm({ book, edition }: EditBookFormProps) {
     </main>
   );
 }
-
 

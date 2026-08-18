@@ -79,6 +79,7 @@ export interface BookPricing {
 export interface BookStats {
   rating?: number | null;
   review_count?: number | null;
+  sales_count?: number | null;
 }
 
 export interface BookMetadata {

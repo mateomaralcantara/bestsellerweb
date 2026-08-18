@@ -4,12 +4,12 @@ import {
   ChevronRight,
   Search,
   ShoppingCart,
-  Star,
   Tags,
   X,
 } from "lucide-react";
 import { getBookCategories, getBooks } from "@/lib/queries";
 import type { Book } from "@/lib/types";
+import { BookSocialProof } from "@/components/books/BookSocialProof";
 
 type CatalogPageProps = {
   searchParams?: {
@@ -454,9 +454,14 @@ function AmazonBookRow({ book }: { book: CatalogBook }) {
             </span>
           </p>
 
+          <BookSocialProof
+            rating={book.rating}
+            salesCount={book.sales_count}
+            className="rounded-2xl border border-amber-100 bg-amber-50/70 px-3 py-2"
+          />
+
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
-              <Star className="mr-1 h-3.5 w-3.5" />
               Disponible
             </span>
 
