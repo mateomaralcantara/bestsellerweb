@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, ShoppingCart } from "lucide-react";
 import { useCart } from "@/components/cart-provider";
+import { trackBookInterest } from "@/lib/book-interest-client";
 
 type Props = {
   bookId: string;
@@ -49,16 +50,19 @@ export function CatalogPurchaseActions({
 
     addItem(cartItem);
     setAdded(true);
+    trackBookInterest(bookId, "add_to_cart");
     return true;
   }
 
   function buyNow() {
     if (addBookToCart()) {
+      trackBookInterest(bookId, "checkout_start");
       router.push("/checkout");
       return;
     }
 
     if (paypalReady) {
+      trackBookInterest(bookId, "checkout_start");
       router.push(
         `/checkout/paypal?bookId=${encodeURIComponent(bookId)}`
       );

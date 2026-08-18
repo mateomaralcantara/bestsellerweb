@@ -16,6 +16,7 @@ import {
   ShoppingCart,
   X,
 } from "lucide-react";
+import { trackBookInterest } from "@/lib/book-interest-client";
 
 export type LookInsidePreviewPage = {
   pageIndex: number;
@@ -27,6 +28,7 @@ export type LookInsidePreviewPage = {
 };
 
 type LookInsidePreviewProps = {
+  bookId: string;
   title: string;
   subtitle?: string | null;
   authorName: string;
@@ -169,6 +171,7 @@ function getStageWidth(params: {
 }
 
 export function LookInsidePreview({
+  bookId,
   title,
   subtitle,
   authorName,
@@ -250,7 +253,8 @@ export function LookInsidePreview({
     setCurrentIndex(0);
     setZoom(1);
     setOpen(true);
-  }, [hasPreview]);
+    trackBookInterest(bookId, "preview_open");
+  }, [bookId, hasPreview]);
 
   const goPrevious = useCallback(() => {
     if (totalViews <= 1) {

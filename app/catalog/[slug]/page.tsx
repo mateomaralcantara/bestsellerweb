@@ -24,6 +24,7 @@ import {
 import { CatalogPurchaseActions } from "@/components/payments/catalog-purchase-actions";
 import { BookSocialProof } from "@/components/books/BookSocialProof";
 import { getBookSocialProof } from "@/lib/book-social-proof";
+import { BookInterestTracker } from "@/components/analytics/BookInterestTracker";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -548,6 +549,7 @@ export default async function BookPublicPage({ params }: PageProps) {
 
   return (
     <main className="relative overflow-hidden pb-12">
+      <BookInterestTracker bookId={book.id} />
       <div className="commercial-dark commercial-grid pointer-events-none absolute inset-x-0 top-0 h-[620px]" />
       <div className="pointer-events-none absolute right-0 top-20 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl" />
 
@@ -626,6 +628,7 @@ export default async function BookPublicPage({ params }: PageProps) {
                 />
 
                 <LookInsidePreview
+                  bookId={book.id}
                   title={book.title}
                   subtitle={book.subtitle}
                   authorName={authorName}

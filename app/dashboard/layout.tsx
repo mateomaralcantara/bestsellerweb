@@ -56,6 +56,11 @@ export default async function DashboardLayout({
                 label: "Registro de compras",
                 description: "Compras activas por usuario",
               },
+              {
+                href: "/dashboard/ai-growth",
+                label: "Agente CEO/SEO",
+                description: "Crecimiento y contenido diario",
+              },
             ]
           : [item]
       )
