@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ShoppingCart } from "lucide-react";
+import { ArrowRight, Check, ShoppingCart } from "lucide-react";
 import { useCart } from "@/components/cart-provider";
 
 type Props = {
@@ -71,7 +71,7 @@ export function CatalogPurchaseActions({
         type="button"
         onClick={buyNow}
         disabled={!hasLocalPrice && !paypalReady}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-black px-5 py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#155eef] px-5 py-3.5 font-black text-white shadow-[0_14px_30px_rgba(21,94,239,0.26)] transition hover:-translate-y-0.5 hover:bg-[#2b78ff] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600 disabled:shadow-none"
       >
         <ShoppingCart className="h-4 w-4" />
         {hasLocalPrice
@@ -79,19 +79,21 @@ export function CatalogPurchaseActions({
           : paypalReady
             ? "Comprar con PayPal"
             : "Precio pendiente"}
+        <ArrowRight className="h-4 w-4" />
       </button>
 
       <button
         type="button"
         onClick={addBookToCart}
         disabled={!hasLocalPrice}
-        className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:border-blue-300 hover:text-[#155eef] disabled:cursor-not-allowed disabled:opacity-50"
       >
+        {added ? <Check className="h-4 w-4" /> : null}
         {added ? "Agregado al carrito" : "Agregar al carrito"}
       </button>
 
       <p
-        className={`rounded-xl px-3 py-2 text-center text-xs font-semibold ${
+        className={`rounded-xl px-3 py-2.5 text-center text-xs font-bold ${
           paypalReady
             ? "bg-blue-50 text-blue-800"
             : "bg-amber-50 text-amber-800"

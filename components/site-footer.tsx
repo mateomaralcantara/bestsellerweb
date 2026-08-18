@@ -1,59 +1,82 @@
 import Link from "next/link";
+import {
+  BookOpenText,
+  CreditCard,
+  Library,
+  LockKeyhole,
+  ShieldCheck,
+} from "lucide-react";
 
-const productLinks = [
-  { href: "/catalog", label: "Catálogo" },
+const exploreLinks = [
+  { href: "/catalog", label: "Explorar catálogo" },
   { href: "/categories", label: "Categorías" },
-  { href: "/publish", label: "Publica" },
-  { href: "/affiliates", label: "Afiliados" },
-  { href: "/dashboard", label: "Dashboard" },
+  { href: "/dashboard", label: "Mi biblioteca" },
+  { href: "/auth", label: "Iniciar sesión" },
 ];
 
-const legalLinks = [
-  { href: "/auth", label: "Acceso" },
-  { href: "#", label: "Privacidad" },
-  { href: "#", label: "Términos" },
-  { href: "#", label: "Licencias digitales" },
+const creatorLinks = [
+  { href: "/publish", label: "Publicar un libro" },
+  { href: "/affiliates", label: "Programa de afiliados" },
+  { href: "/dashboard/books/published", label: "Libros publicados" },
+];
+
+const trustItems = [
+  { icon: CreditCard, label: "Pago protegido" },
+  { icon: LockKeyhole, label: "Archivos privados" },
+  { icon: Library, label: "Biblioteca digital" },
 ];
 
 export function SiteFooter() {
   return (
-    <footer className="mt-20 border-t border-slate-200 bg-white/80">
-      <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-4 lg:px-8">
-        <div className="space-y-4 lg:col-span-2">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-700 to-accent-600 font-black text-white shadow-glow">
-              B
+    <footer className="mt-16 overflow-hidden bg-[#07111f] text-white">
+      <div className="border-b border-white/10 bg-gradient-to-r from-[#0d2f56] via-[#155eef] to-[#0b79a7]">
+        <div className="mx-auto grid max-w-7xl gap-4 px-4 py-6 sm:grid-cols-3 sm:px-6 lg:px-8">
+          {trustItems.map(({ icon: Icon, label }) => (
+            <div key={label} className="flex items-center justify-center gap-3 text-sm font-bold">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/12 ring-1 ring-white/20">
+                <Icon className="h-5 w-5" />
+              </span>
+              {label}
             </div>
+          ))}
+        </div>
+      </div>
 
-            <div>
-              <p className="font-display text-lg font-bold text-brand-800">
-                BestSeller
-              </p>
-              <p className="text-sm text-slate-500">
-                El ecosistema editorial para publicar, vender y escalar libros.
-              </p>
-            </div>
+      <div className="mx-auto grid max-w-7xl gap-12 px-4 py-16 sm:px-6 md:grid-cols-2 lg:grid-cols-[1.4fr_0.7fr_0.7fr] lg:px-8">
+        <div>
+          <Link href="/" className="inline-flex items-center gap-3" aria-label="BestSeller, inicio">
+            <span className="flex h-12 w-12 items-center justify-center rounded-[16px] bg-gradient-to-br from-[#2b78ff] to-[#13b8e8] shadow-[0_16px_35px_rgba(21,94,239,0.28)]">
+              <BookOpenText className="h-5 w-5" />
+            </span>
+            <span>
+              <span className="block text-xl font-black tracking-tight">
+                Best<span className="text-[#4bd3ff]">Seller</span>
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">
+                Plataforma editorial
+              </span>
+            </span>
           </Link>
 
-          <p className="max-w-xl text-sm leading-7 text-slate-700">
-            Plataforma lista para autores, lectores y afiliados. Diseñada para
-            libro impreso, eBook, lectura en nube, catálogo categorizado y
-            distribución externa.
+          <p className="mt-6 max-w-xl text-sm leading-7 text-slate-400">
+            Un ecosistema comercial para descubrir, publicar, comprar y leer
+            libros digitales con una experiencia moderna y segura.
           </p>
+
+          <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-xs font-bold text-emerald-300">
+            <ShieldCheck className="h-4 w-4" />
+            Compra segura y acceso protegido
+          </div>
         </div>
 
         <div>
-          <h4 className="mb-4 text-sm font-semibold uppercase tracking-[0.24em] text-accent-700">
-            Producto
-          </h4>
-
-          <ul className="space-y-3 text-sm text-slate-700">
-            {productLinks.map((item) => (
+          <p className="text-xs font-black uppercase tracking-[0.24em] text-[#4bd3ff]">
+            Explorar
+          </p>
+          <ul className="mt-5 space-y-3 text-sm text-slate-300">
+            {exploreLinks.map((item) => (
               <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className="transition hover:text-brand-700"
-                >
+                <Link href={item.href} className="hover:text-white">
                   {item.label}
                 </Link>
               </li>
@@ -62,31 +85,23 @@ export function SiteFooter() {
         </div>
 
         <div>
-          <h4 className="mb-4 text-sm font-semibold uppercase tracking-[0.24em] text-accent-700">
-            Legal
-          </h4>
-
-          <ul className="space-y-3 text-sm text-slate-700">
-            {legalLinks.map((item) => (
-              <li key={item.label}>
-                {item.href === "#" ? (
-                  <span className="text-slate-500">{item.label}</span>
-                ) : (
-                  <Link
-                    href={item.href}
-                    className="transition hover:text-brand-700"
-                  >
-                    {item.label}
-                  </Link>
-                )}
+          <p className="text-xs font-black uppercase tracking-[0.24em] text-[#4bd3ff]">
+            Creadores
+          </p>
+          <ul className="mt-5 space-y-3 text-sm text-slate-300">
+            {creatorLinks.map((item) => (
+              <li key={item.href}>
+                <Link href={item.href} className="hover:text-white">
+                  {item.label}
+                </Link>
               </li>
             ))}
           </ul>
         </div>
       </div>
 
-      <div className="border-t border-slate-200 px-4 py-5 text-center text-xs text-slate-500">
-        © 2026 BestSeller. Diseño limpio, contraste duro y foco en vender.
+      <div className="border-t border-white/10 px-4 py-6 text-center text-xs text-slate-500">
+        © 2026 BestSeller · Historias que encuentran lectores.
       </div>
     </footer>
   );

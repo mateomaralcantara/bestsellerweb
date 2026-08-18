@@ -8,7 +8,6 @@ import {
   Tags,
   X,
 } from "lucide-react";
-import { SectionHeading } from "@/components/section-heading";
 import { getBookCategories, getBooks } from "@/lib/queries";
 import type { Book } from "@/lib/types";
 
@@ -304,27 +303,38 @@ function CategorySidebar({
 }) {
   return (
     <aside className="lg:sticky lg:top-24 lg:self-start">
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="commercial-card overflow-hidden rounded-[30px] p-5">
         <div className="flex items-center gap-2">
-          <Tags className="h-5 w-5 text-brand-700" />
-          <h2 className="font-black text-slate-950">Categorías</h2>
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-[#155eef]">
+            <Tags className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#155eef]">
+              Explorar por tema
+            </p>
+            <h2 className="font-black text-[#07111f]">Categorías</h2>
+          </div>
         </div>
 
-        <p className="mt-2 text-xs leading-5 text-slate-500">
-          Filtra el catálogo por departamento editorial, estilo Amazon.
+        <p className="mt-4 text-xs leading-5 text-slate-500">
+          Encuentra rápidamente el tipo de lectura que estás buscando.
         </p>
 
-        <div className="mt-5 border-t border-slate-100 pt-4">
+        <div className="mt-5 border-t border-slate-200/70 pt-4">
           <Link
             href={getCatalogHref({ query })}
             className={`flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-bold transition ${
               !selectedCategory
-                ? "bg-[#ffd814] text-slate-950"
-                : "text-slate-700 hover:bg-slate-50"
+                ? "bg-[#07111f] text-white shadow-[0_12px_28px_rgba(7,17,31,0.16)]"
+                : "text-slate-700 hover:bg-blue-50 hover:text-[#155eef]"
             }`}
           >
             <span>Todos los libros</span>
-            <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs">
+            <span className={`rounded-full px-2 py-0.5 text-xs ${
+              !selectedCategory
+                ? "bg-white/15 text-white"
+                : "bg-slate-100 text-slate-500"
+            }`}>
               {totalBooks}
             </span>
           </Link>
@@ -343,8 +353,8 @@ function CategorySidebar({
                   })}
                   className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm transition ${
                     active
-                      ? "bg-brand-50 font-black text-brand-800"
-                      : "font-semibold text-slate-700 hover:bg-slate-50 hover:text-brand-700"
+                      ? "bg-blue-50 font-black text-[#155eef] ring-1 ring-blue-100"
+                      : "font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#155eef]"
                   }`}
                 >
                   <span className="line-clamp-1">{category.label}</span>
@@ -352,7 +362,7 @@ function CategorySidebar({
                   <span
                     className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
                       active
-                        ? "bg-white text-brand-700"
+                        ? "bg-white text-[#155eef]"
                         : "bg-slate-100 text-slate-500"
                     }`}
                   >
@@ -365,8 +375,8 @@ function CategorySidebar({
         </div>
 
         {selectedCategory ? (
-          <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">
+          <div className="mt-5 rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-cyan-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#155eef]">
               Filtro activo
             </p>
 
@@ -380,7 +390,7 @@ function CategorySidebar({
 
             <Link
               href={getCatalogHref({ query })}
-              className="mt-3 inline-flex items-center gap-2 text-xs font-black text-amber-800 hover:underline"
+              className="mt-3 inline-flex items-center gap-2 text-xs font-black text-[#155eef] hover:underline"
             >
               <X className="h-3.5 w-3.5" />
               Quitar categoría
@@ -406,26 +416,27 @@ function AmazonBookRow({ book }: { book: CatalogBook }) {
     book.compare_at_price > book.price;
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-lg">
+    <article className="group commercial-card overflow-hidden rounded-[30px] transition duration-300 hover:-translate-y-1 hover:border-blue-200 hover:shadow-[0_32px_76px_rgba(21,94,239,0.13)]">
       <div className="grid gap-0 md:grid-cols-[180px_minmax(0,1fr)_220px]">
         <Link
           href={`/catalog/${book.slug}`}
-          className="flex items-center justify-center bg-slate-100 p-5"
+          className="relative flex items-center justify-center overflow-hidden bg-gradient-to-br from-[#e7f0ff] via-white to-[#e8fbff] p-6"
         >
+          <span className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-blue-300/25 blur-2xl" />
           <img
             src={getCover(book)}
             alt={book.title}
-            className="aspect-[2/3] w-full max-w-[140px] rounded-lg object-cover shadow-xl ring-1 ring-black/10"
+            className="book-cover-shadow relative aspect-[2/3] w-full max-w-[140px] rounded-r-lg rounded-l-sm object-cover transition duration-500 group-hover:-translate-y-1 group-hover:rotate-1 group-hover:scale-[1.025]"
           />
         </Link>
 
-        <div className="space-y-3 p-5">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent-700">
+        <div className="space-y-3 p-6">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#155eef]">
             {getMainCategory(book)}
           </p>
 
           <Link href={`/catalog/${book.slug}`}>
-            <h2 className="line-clamp-2 text-xl font-black leading-tight text-slate-950 hover:text-brand-700">
+            <h2 className="line-clamp-2 text-2xl font-black leading-tight tracking-[-0.025em] text-[#07111f] hover:text-[#155eef]">
               {book.title}
             </h2>
           </Link>
@@ -444,12 +455,12 @@ function AmazonBookRow({ book }: { book: CatalogBook }) {
           </p>
 
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
-              <Star className="mr-1 h-3.5 w-3.5 fill-current" />
+            <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+              <Star className="mr-1 h-3.5 w-3.5" />
               Disponible
             </span>
 
-            <span className="inline-flex rounded-full bg-brand-50 px-3 py-1 text-xs font-bold text-brand-700">
+            <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-[#155eef]">
               {getCategoryText(book)}
             </span>
 
@@ -476,13 +487,13 @@ function AmazonBookRow({ book }: { book: CatalogBook }) {
           ) : null}
         </div>
 
-        <aside className="flex flex-col justify-between border-t border-slate-200 p-5 md:border-l md:border-t-0">
+        <aside className="flex flex-col justify-between border-t border-slate-200/80 bg-slate-50/60 p-6 md:border-l md:border-t-0">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
               Precio
             </p>
 
-            <p className="mt-2 text-2xl font-black text-slate-950">{price}</p>
+            <p className="mt-2 text-2xl font-black text-[#07111f]">{price}</p>
 
             {hasCompareAtPrice ? (
               <p className="mt-1 text-sm text-slate-400 line-through">
@@ -499,7 +510,7 @@ function AmazonBookRow({ book }: { book: CatalogBook }) {
           <div className="mt-5 space-y-2">
             <Link
               href={`/catalog/${book.slug}`}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#ffd814] px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-[#f7ca00]"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#155eef] px-4 py-3.5 text-sm font-black text-white shadow-[0_12px_26px_rgba(21,94,239,0.25)] transition hover:-translate-y-0.5 hover:bg-[#2b78ff]"
             >
               <ShoppingCart className="h-4 w-4" />
               Comprar / leer
@@ -507,7 +518,7 @@ function AmazonBookRow({ book }: { book: CatalogBook }) {
 
             <Link
               href={`/catalog/${book.slug}`}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-blue-300 hover:text-[#155eef]"
             >
               Ver detalles
               <ChevronRight className="h-4 w-4" />
@@ -547,16 +558,25 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   });
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-          <SectionHeading
-            eyebrow="Catálogo"
-            title="Libros listos para vender en serio"
-            description="Explora libros por categoría, búsqueda y resultados tipo marketplace."
-          />
+    <main className="min-h-screen">
+      <section className="commercial-dark commercial-grid commercial-shine relative overflow-hidden">
+        <div className="pointer-events-none absolute right-0 top-0 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
+        <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+          <div className="max-w-3xl">
+            <p className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3.5 py-1.5 text-[11px] font-black uppercase tracking-[0.22em] text-cyan-200">
+              <BookOpen className="h-3.5 w-3.5" />
+              Catálogo editorial
+            </p>
+            <h1 className="mt-5 text-balance text-4xl font-black tracking-[-0.04em] text-white sm:text-5xl lg:text-6xl">
+              Encuentra tu próxima gran lectura.
+            </h1>
+            <p className="mt-5 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg">
+              Explora títulos independientes, revisa su muestra y compra con
+              seguridad desde una sola plataforma.
+            </p>
+          </div>
 
-          <form className="mt-8 grid gap-3 lg:grid-cols-[1fr_auto]">
+          <form className="mt-9 grid max-w-4xl gap-3 rounded-[26px] border border-white/15 bg-white/10 p-2 backdrop-blur-xl sm:grid-cols-[1fr_auto]">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
 
@@ -564,7 +584,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
                 name="q"
                 defaultValue={query}
                 placeholder="Buscar por título, autor, categoría o palabra clave..."
-                className="w-full rounded-2xl border border-slate-200 bg-white py-4 pl-12 pr-4 text-sm outline-none transition focus:border-brand-300 focus:ring-4 focus:ring-brand-100"
+                className="w-full rounded-[20px] border border-white/20 bg-white py-4 pl-12 pr-4 text-sm text-[#07111f] shadow-sm outline-none transition placeholder:text-slate-400 focus:ring-4 focus:ring-cyan-300/20"
               />
             </label>
 
@@ -574,7 +594,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
 
             <button
               type="submit"
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-6 py-4 text-sm font-bold text-white transition hover:opacity-90"
+              className="inline-flex items-center justify-center gap-2 rounded-[20px] bg-[#ffbf3f] px-7 py-4 text-sm font-black text-[#07111f] transition hover:-translate-y-0.5 hover:bg-[#ffcf68]"
             >
               <Search className="h-4 w-4" />
               Buscar
@@ -582,14 +602,14 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
           </form>
 
           <div className="mt-5 flex flex-wrap items-center gap-3 text-sm">
-            <span className="rounded-full bg-slate-100 px-4 py-2 font-semibold text-slate-700">
+            <span className="rounded-full border border-white/15 bg-white/10 px-4 py-2 font-semibold text-slate-200">
               {filteredBooks.length} resultados
             </span>
 
             {selectedCategory ? (
               <Link
                 href={getCatalogHref({ query })}
-                className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 font-bold text-amber-800"
+                className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 font-bold text-cyan-100"
               >
                 <X className="h-4 w-4" />
                 {selectedCategory}
@@ -599,7 +619,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-7xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[285px_minmax(0,1fr)] lg:px-8">
+      <section className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[285px_minmax(0,1fr)] lg:px-8 lg:py-16">
         <CategorySidebar
           categories={sidebarCategories}
           selectedCategory={selectedCategory}
@@ -611,11 +631,11 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
         <section className="min-w-0">
           <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="text-sm font-bold uppercase tracking-[0.22em] text-accent-700">
+              <p className="text-sm font-black uppercase tracking-[0.22em] text-[#155eef]">
                 Resultados
               </p>
 
-              <h2 className="mt-1 text-2xl font-black text-slate-950">
+              <h2 className="mt-1 text-3xl font-black tracking-tight text-[#07111f]">
                 {selectedCategory
                   ? `Libros en ${selectedCategory}`
                   : "Todos los libros"}
@@ -628,7 +648,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
           </div>
 
           {filteredBooks.length === 0 ? (
-            <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center shadow-panel">
+            <div className="commercial-card rounded-[32px] p-10 text-center">
               <BookOpen className="mx-auto h-12 w-12 text-slate-400" />
 
               <h2 className="mt-4 text-xl font-black text-slate-950">
@@ -643,7 +663,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
 
               <Link
                 href="/catalog"
-                className="mt-5 inline-flex rounded-2xl bg-black px-5 py-3 text-sm font-bold text-white"
+                className="premium-button mt-5 bg-[#155eef] text-sm text-white"
               >
                 Ver todo el catálogo
               </Link>
