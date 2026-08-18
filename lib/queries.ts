@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { Book, BookFormat, BookStatus } from "@/lib/types";
 import { createClient } from "@/lib/supabase/server";
+import { getBookSocialProof } from "@/lib/book-social-proof";
 
 const BOOK_SELECT = `
   id,
@@ -20,6 +21,7 @@ const BOOK_SELECT = `
   isbn_13,
   page_count,
   publication_date,
+  metadata,
   created_at,
   updated_at
 `;
@@ -66,6 +68,7 @@ type BookRow = {
   isbn_13?: string | null;
   page_count?: number | null;
   publication_date?: string | null;
+  metadata?: Record<string, unknown> | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -175,6 +178,7 @@ function normalizeBook(row: BookRow, edition: EditionRow | null = null): Book {
   const longDescription = normalizeText(row.description_long);
   const pricing = resolveEditionPrice(edition);
   const format = normalizeFormat(edition?.format);
+  const socialProof = getBookSocialProof(row.metadata);
 
   const shortDescription =
     normalizeText(row.description_short) ||
@@ -206,8 +210,9 @@ function normalizeBook(row: BookRow, edition: EditionRow | null = null): Book {
     price: pricing.price,
     compare_at_price: pricing.compareAtPrice,
     currency: pricing.currency,
-    rating: null,
+    rating: socialProof.rating,
     review_count: 0,
+    sales_count: socialProof.salesCount,
     formats: format ? [format] : [],
     categories: [],
     badge: null,
