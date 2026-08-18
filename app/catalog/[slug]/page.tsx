@@ -5,6 +5,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
+  ArrowLeft,
   BookOpen,
   CheckCircle2,
   Globe2,
@@ -437,9 +438,9 @@ function InfoCard({
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="commercial-card rounded-[22px] p-4">
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[#155eef]">
           <Icon className="h-5 w-5" />
         </div>
 
@@ -467,8 +468,8 @@ function TextSection({
   }
 
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="text-xl font-bold text-slate-950">{title}</h2>
+    <section className="commercial-card rounded-[28px] p-6 sm:p-7">
+      <h2 className="text-xl font-black text-[#07111f]">{title}</h2>
 
       <p className="mt-3 whitespace-pre-line leading-8 text-slate-700">
         {children}
@@ -541,31 +542,46 @@ export default async function BookPublicPage({ params }: PageProps) {
   const readerUrl = `/reader/${encodeURIComponent(book.slug)}`;
 
   return (
-    <main className="bg-slate-50">
-      <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+    <main className="relative overflow-hidden pb-12">
+      <div className="commercial-dark commercial-grid pointer-events-none absolute inset-x-0 top-0 h-[620px]" />
+      <div className="pointer-events-none absolute right-0 top-20 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl" />
+
+      <section className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+        <div className="mb-7 flex items-center gap-2 text-sm text-slate-300">
+          <Link
+            href="/catalog"
+            className="inline-flex items-center gap-2 font-bold text-white hover:text-cyan-200"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Catálogo
+          </Link>
+          <span className="text-white/30">/</span>
+          <span className="line-clamp-1">{book.title}</span>
+        </div>
+
         <div className="grid gap-10 lg:grid-cols-[360px_1fr] lg:items-start">
           <aside className="space-y-5 lg:sticky lg:top-28">
-            <div className="rounded-[32px] border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rounded-[34px] border border-white/15 bg-white/10 p-5 shadow-[0_35px_90px_rgba(0,0,0,0.28)] backdrop-blur-xl">
               {coverUrl ? (
                 <img
                   src={coverUrl}
                   alt={`Portada de ${book.title}`}
-                  className="aspect-[3/4] w-full rounded-[24px] object-cover"
+                  className="book-cover-shadow aspect-[3/4] w-full rounded-r-[20px] rounded-l-md object-cover"
                 />
               ) : (
-                <div className="flex aspect-[3/4] w-full items-center justify-center rounded-[24px] border border-dashed border-slate-300 bg-slate-100 text-sm text-slate-500">
+                <div className="flex aspect-[3/4] w-full items-center justify-center rounded-[24px] border border-dashed border-white/25 bg-white/10 text-sm text-slate-300">
                   Sin portada
                 </div>
               )}
             </div>
 
-            <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+            <div className="commercial-card rounded-[30px] p-6">
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-[#155eef]">
                 Precio
               </p>
 
               <div className="mt-2 flex flex-wrap items-end gap-3">
-                <p className="text-3xl font-black text-slate-950">
+                <p className="text-3xl font-black tracking-tight text-[#07111f]">
                   {formattedPrice ?? "Precio no disponible"}
                 </p>
 
@@ -611,15 +627,18 @@ export default async function BookPublicPage({ params }: PageProps) {
 
                 <Link
                   href={readerUrl}
-                  className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
+                  className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-5 py-3 font-bold text-slate-700 transition hover:border-blue-300 hover:text-[#155eef]"
                 >
                   Leer si ya compraste
                 </Link>
               </div>
 
-              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-800">
-                <strong>Acceso protegido:</strong> el libro completo solo se
-                abre después de compra aprobada.
+              <div className="mt-4 flex gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-800">
+                <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
+                <p>
+                  <strong>Acceso protegido:</strong> el libro completo solo se
+                  abre después de una compra aprobada.
+                </p>
               </div>
 
               {process.env.NODE_ENV !== "production" ? (
@@ -636,45 +655,45 @@ export default async function BookPublicPage({ params }: PageProps) {
           </aside>
 
           <section className="space-y-6">
-            <header className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+            <header className="commercial-dark commercial-shine overflow-hidden rounded-[34px] border border-white/15 p-6 text-white shadow-[0_30px_80px_rgba(0,0,0,0.18)] md:p-9">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-emerald-700">
                   Publicado
                 </span>
 
                 {edition?.format ? (
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200">
                     {getFormatLabel(edition.format)}
                   </span>
                 ) : null}
 
                 {book.language_code ? (
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200">
                     {getLanguageLabel(book.language_code)}
                   </span>
                 ) : null}
               </div>
 
-              <h1 className="mt-5 text-4xl font-black tracking-tight text-slate-950 md:text-5xl">
+              <h1 className="mt-5 text-balance text-4xl font-black tracking-[-0.045em] text-white md:text-5xl lg:text-6xl">
                 {book.title}
               </h1>
 
               {book.subtitle ? (
-                <p className="mt-3 text-xl font-medium leading-8 text-slate-600">
+                <p className="mt-4 text-xl font-medium leading-8 text-slate-300">
                   {book.subtitle}
                 </p>
               ) : null}
 
-              <p className="mt-4 text-sm text-slate-500">
+              <p className="mt-5 text-sm text-slate-400">
                 Por{" "}
-                <span className="font-semibold text-slate-800">
+                <span className="font-bold text-white">
                   {authorName}
                 </span>
                 {book.publisher_name ? (
                   <>
                     {" "}
                     · Sello:{" "}
-                    <span className="font-semibold text-slate-800">
+                    <span className="font-bold text-white">
                       {book.publisher_name}
                     </span>
                   </>
@@ -682,21 +701,21 @@ export default async function BookPublicPage({ params }: PageProps) {
               </p>
 
               {book.sales_hook ? (
-                <div className="mt-6 rounded-[24px] border border-amber-200 bg-amber-50 p-5">
-                  <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">
-                    Gancho de venta
+                <div className="mt-7 rounded-[24px] border border-[#ffcf68]/25 bg-[#ffbf3f]/10 p-5">
+                  <p className="text-sm font-black uppercase tracking-[0.2em] text-[#ffcf68]">
+                    Por qué leerlo
                   </p>
 
-                  <p className="mt-2 text-lg font-semibold leading-8 text-amber-950">
+                  <p className="mt-2 text-lg font-semibold leading-8 text-white">
                     {book.sales_hook}
                   </p>
                 </div>
               ) : null}
 
               <section className="mt-6">
-                <h2 className="text-xl font-bold text-slate-950">Resumen</h2>
+                <h2 className="text-xl font-black text-white">Resumen</h2>
 
-                <p className="mt-3 whitespace-pre-line text-lg leading-8 text-slate-700">
+                <p className="mt-3 whitespace-pre-line text-lg leading-8 text-slate-300">
                   {summary}
                 </p>
               </section>
@@ -729,8 +748,8 @@ export default async function BookPublicPage({ params }: PageProps) {
             </div>
 
             {categoryTrail.length > 0 ? (
-              <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="text-xl font-bold text-slate-950">
+              <section className="commercial-card rounded-[28px] p-6">
+                <h2 className="text-xl font-black text-[#07111f]">
                   Clasificación editorial
                 </h2>
 
@@ -748,8 +767,8 @@ export default async function BookPublicPage({ params }: PageProps) {
             ) : null}
 
             {keywords.length > 0 ? (
-              <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="text-xl font-bold text-slate-950">
+              <section className="commercial-card rounded-[28px] p-6">
+                <h2 className="text-xl font-black text-[#07111f]">
                   Palabras clave
                 </h2>
 
@@ -757,7 +776,7 @@ export default async function BookPublicPage({ params }: PageProps) {
                   {keywords.map((keyword) => (
                     <span
                       key={keyword}
-                      className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white"
+                      className="rounded-full bg-[#07111f] px-4 py-2 text-sm font-semibold text-white"
                     >
                       {keyword}
                     </span>
@@ -768,9 +787,9 @@ export default async function BookPublicPage({ params }: PageProps) {
 
             <div className="grid gap-6 md:grid-cols-2">
               {book.target_audience ? (
-                <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                <section className="commercial-card rounded-[28px] p-6">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-[#155eef]">
                       <Target className="h-5 w-5" />
                     </div>
 
@@ -786,9 +805,9 @@ export default async function BookPublicPage({ params }: PageProps) {
               ) : null}
 
               {book.reader_promise ? (
-                <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                <section className="editorial-special rounded-[28px] p-6">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#155eef] shadow-sm">
                       <Sparkles className="h-5 w-5" />
                     </div>
 
@@ -816,8 +835,8 @@ export default async function BookPublicPage({ params }: PageProps) {
               {book.comparable_books}
             </TextSection>
 
-            <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-950">
+            <section className="commercial-card rounded-[28px] p-6">
+              <h2 className="text-xl font-black text-[#07111f]">
                 Detalles del producto
               </h2>
 
@@ -866,7 +885,7 @@ export default async function BookPublicPage({ params }: PageProps) {
               </dl>
             </section>
 
-            <section className="rounded-[28px] border border-emerald-200 bg-emerald-50 p-6 text-emerald-900">
+            <section className="rounded-[28px] border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-6 text-emerald-900 shadow-sm">
               <div className="flex gap-3">
                 <ShieldCheck className="mt-1 h-6 w-6 shrink-0" />
 
@@ -882,8 +901,8 @@ export default async function BookPublicPage({ params }: PageProps) {
               </div>
             </section>
 
-            <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-950">
+            <section className="commercial-card rounded-[28px] p-6">
+              <h2 className="text-xl font-black text-[#07111f]">
                 ¿Qué incluye?
               </h2>
 
@@ -906,8 +925,8 @@ export default async function BookPublicPage({ params }: PageProps) {
             </section>
 
             {book.sample_url ? (
-              <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="text-xl font-bold text-slate-950">
+              <section className="commercial-card rounded-[28px] p-6">
+                <h2 className="text-xl font-black text-[#07111f]">
                   Muestra externa
                 </h2>
 
@@ -915,7 +934,7 @@ export default async function BookPublicPage({ params }: PageProps) {
                   href={book.sample_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-4 inline-flex rounded-2xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
+                  className="mt-4 inline-flex rounded-2xl border border-slate-300 px-5 py-3 font-bold text-slate-700 transition hover:border-blue-300 hover:text-[#155eef]"
                 >
                   Ver muestra
                 </Link>

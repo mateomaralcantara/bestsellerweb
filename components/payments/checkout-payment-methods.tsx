@@ -7,7 +7,7 @@ import { FuturePaymentMethods } from "@/components/payments/future-payment-metho
 
 function PayPalMark() {
   return (
-    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#142c8e] text-xl font-black italic text-white shadow-sm">
+    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-[#142c8e] text-xl font-black italic text-white shadow-[0_10px_24px_rgba(20,44,142,0.28)] ring-1 ring-white/25">
       P
     </span>
   );
@@ -17,16 +17,17 @@ export function CheckoutPaymentMethods() {
   const { items } = useCart();
 
   return (
-    <aside className="space-y-5 lg:sticky lg:top-28 lg:self-start">
-      <section className="overflow-hidden rounded-[30px] border-2 border-[#0070ba] bg-white shadow-xl">
-        <div className="bg-gradient-to-r from-[#003087] to-[#0070ba] p-5 text-white">
+    <aside className="space-y-5 lg:sticky lg:top-32 lg:self-start">
+      <section className="overflow-hidden rounded-[32px] border border-[#0070ba]/30 bg-white shadow-[0_30px_80px_rgba(0,48,135,0.16)] ring-1 ring-blue-100">
+        <div className="relative overflow-hidden bg-gradient-to-br from-[#001c64] via-[#003087] to-[#0070ba] p-6 text-white">
+          <span className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-cyan-300/15 blur-2xl" />
           <div className="flex items-center gap-3">
             <PayPalMark />
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-100">
                 Método principal
               </p>
-              <h2 className="text-2xl font-black">PayPal</h2>
+              <h2 className="text-2xl font-black tracking-tight">PayPal</h2>
             </div>
           </div>
 
@@ -36,7 +37,7 @@ export function CheckoutPaymentMethods() {
           </p>
         </div>
 
-        <div className="space-y-3 p-5">
+        <div className="space-y-3 p-6">
           {items.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
               Agrega un libro para continuar con PayPal.
@@ -62,7 +63,7 @@ export function CheckoutPaymentMethods() {
                   href={`/checkout/paypal?bookId=${encodeURIComponent(
                     item.id
                   )}`}
-                  className="flex min-h-14 w-full items-center justify-center gap-3 rounded-xl border border-[#e5b900] bg-[#ffd140] px-4 py-3 text-center font-black text-[#142c8e] transition hover:-translate-y-0.5 hover:bg-[#f7c928]"
+                className="flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl border border-[#e5b900] bg-[#ffd140] px-4 py-3 text-center font-black text-[#142c8e] shadow-[0_14px_28px_rgba(229,185,0,0.2)] transition hover:-translate-y-0.5 hover:bg-[#ffdf61]"
                 >
                   <PayPalMark />
                   <span className="min-w-0">
@@ -86,7 +87,7 @@ export function CheckoutPaymentMethods() {
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="commercial-card rounded-[28px] p-5">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
           Otros métodos
         </p>

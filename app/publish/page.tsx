@@ -117,7 +117,7 @@ function MainAction({
     return (
       <Link
         href="/dashboard/books/new"
-        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-5 py-3 font-semibold text-white transition hover:opacity-90"
+        className="premium-button bg-[#155eef] text-white"
       >
         Crear nuevo libro
         <ArrowRight className="h-4 w-4" />
@@ -128,7 +128,7 @@ function MainAction({
   return (
     <Link
       href="/dashboard"
-      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-5 py-3 font-semibold text-white transition hover:opacity-90"
+      className="premium-button bg-[#155eef] text-white"
     >
       Ir al dashboard
       <ArrowRight className="h-4 w-4" />
@@ -151,13 +151,13 @@ export default async function PublishPage() {
   const access = await getAuthorPublishingAccess(user.id);
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+    <main className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
       <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr]">
         <section className="space-y-8">
           <SectionHeading
             eyebrow="Publicar"
-            title="Publicar un libro no es subir un PDF y rezar."
-            description="Este módulo funciona como guía. El formulario real está en Nuevo libro, pero solo autores con sección creada y aprobada pueden publicar."
+            title="Convierte tu manuscrito en una vitrina profesional."
+            description="Prepara la ficha editorial, los archivos y la estrategia comercial de tu libro dentro de un flujo guiado y sujeto a revisión."
           />
 
           <StatusCard allowed={access.allowed} message={access.message} />
@@ -166,8 +166,8 @@ export default async function PublishPage() {
             {publishFeatures.map(({ icon: Icon, title, text }, index) => {
               const cardClassName =
                 index === 0
-                  ? "editorial-special rounded-[28px] p-5 shadow-panel"
-                  : "glass rounded-[28px] p-5 shadow-panel";
+                  ? "editorial-special rounded-[28px] p-5"
+                  : "commercial-card rounded-[28px] p-5";
 
               return (
                 <div key={title} className={cardClassName}>
@@ -187,7 +187,7 @@ export default async function PublishPage() {
             })}
           </div>
 
-          <div className="rounded-[28px] border border-slate-200 bg-white/90 p-6 shadow-panel">
+          <div className="commercial-card rounded-[28px] p-6">
             <h2 className="text-lg font-bold text-brand-800">
               Antes de empezar, ten listo
             </h2>
@@ -195,7 +195,7 @@ export default async function PublishPage() {
             <div className="mt-4 space-y-3">
               {checklist.map((item) => (
                 <div key={item} className="flex items-center gap-3">
-                  <CheckCircle2 className="h-5 w-5 shrink-0 text-accent-700" />
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
                   <p className="text-sm text-slate-700">{item}</p>
                 </div>
               ))}
@@ -204,35 +204,34 @@ export default async function PublishPage() {
         </section>
 
         <section className="space-y-6">
-          <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-panel">
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent-700">
-              Modo tutorial
+          <div className="commercial-dark commercial-shine overflow-hidden rounded-[34px] border border-white/10 p-6 shadow-[0_32px_80px_rgba(7,17,31,0.22)] sm:p-8">
+            <p className="text-sm font-black uppercase tracking-[0.22em] text-cyan-300">
+              Ruta de publicación
             </p>
 
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-brand-800">
+            <h2 className="mt-3 text-3xl font-black tracking-tight text-white">
               Cómo funciona el flujo editorial
             </h2>
 
-            <p className="mt-3 text-sm leading-7 text-slate-700">
-              Usamos un solo formulario real. Primero creas el libro, luego
-              queda en evaluación, y después se aprueba o se rechaza. Más
-              limpio, menos duplicación, más tipo marketplace serio.
+            <p className="mt-3 text-sm leading-7 text-slate-300">
+              Creas una sola ficha, envías el libro a evaluación y recibes el
+              estado editorial antes de que aparezca en el catálogo público.
             </p>
 
             <div className="mt-6 space-y-4">
               {tutorialSteps.map(({ icon: Icon, title, text }) => (
                 <div
                   key={title}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                  className="rounded-2xl border border-white/10 bg-white/5 p-4"
                 >
                   <div className="flex gap-4">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-brand-700 shadow-sm">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-cyan-200 ring-1 ring-white/15">
                       <Icon className="h-5 w-5" />
                     </div>
 
                     <div>
-                      <h3 className="font-bold text-slate-950">{title}</h3>
-                      <p className="mt-1 text-sm leading-6 text-slate-600">
+                      <h3 className="font-bold text-white">{title}</h3>
+                      <p className="mt-1 text-sm leading-6 text-slate-300">
                         {text}
                       </p>
                     </div>
@@ -246,14 +245,14 @@ export default async function PublishPage() {
 
               <Link
                 href="/dashboard/books/published"
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="inline-flex items-center justify-center rounded-full border border-white/20 bg-white/10 px-5 py-3 font-bold text-white transition hover:bg-white/15"
               >
                 Ver mis libros
               </Link>
             </div>
           </div>
 
-          <div className="rounded-[28px] border border-slate-200 bg-white p-5 text-sm leading-7 text-slate-700 shadow-sm">
+          <div className="commercial-card rounded-[28px] p-5 text-sm leading-7 text-slate-700">
             <div className="flex gap-3">
               <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-brand-700" />
               <div>

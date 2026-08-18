@@ -8,7 +8,6 @@ import {
   Tags,
 } from "lucide-react";
 import { getBooks } from "@/lib/queries";
-import { SectionHeading } from "@/components/section-heading";
 
 type CategoryStat = {
   name: string;
@@ -87,17 +86,41 @@ export default async function CategoriesPage() {
   const topCategory = categories[0] ?? null;
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-      <div className="grid gap-10 lg:grid-cols-[0.72fr_1.28fr]">
+    <main>
+      <section className="commercial-dark commercial-grid commercial-shine relative overflow-hidden">
+        <div className="pointer-events-none absolute right-0 top-0 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
+        <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+          <p className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3.5 py-1.5 text-[11px] font-black uppercase tracking-[0.22em] text-cyan-200">
+            <Tags className="h-4 w-4" />
+            Categorías
+          </p>
+          <h1 className="mt-5 max-w-4xl text-balance text-4xl font-black tracking-[-0.04em] text-white sm:text-5xl lg:text-6xl">
+            Una lectura para cada interés.
+          </h1>
+          <p className="mt-5 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg">
+            Explora el catálogo por temas y descubre rápidamente los libros que
+            mejor conectan contigo.
+          </p>
+        </div>
+      </section>
+
+      <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[0.72fr_1.28fr] lg:px-8 lg:py-20">
         <aside className="space-y-6">
-          <SectionHeading
-            eyebrow="Categorías"
-            title="Explora libros por nicho, tema y oportunidad."
-            description="Una página limpia para que el lector no tenga que bucear como detective sin sueldo. Categorías claras, conteos y acceso directo al catálogo filtrado."
-          />
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-[#155eef]">
+              Panorama editorial
+            </p>
+            <h2 className="mt-3 text-balance text-3xl font-black tracking-[-0.035em] text-[#07111f] sm:text-4xl">
+              Explora por nicho, tema y estilo.
+            </h2>
+            <p className="mt-4 leading-7 text-slate-600">
+              Cada categoría te lleva directamente a los títulos disponibles y
+              a sus fichas de compra.
+            </p>
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
-            <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="commercial-card rounded-[26px] p-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
                   <LibraryBig className="h-5 w-5" />
@@ -111,7 +134,7 @@ export default async function CategoriesPage() {
               </div>
             </div>
 
-            <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="commercial-card rounded-[26px] p-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent-50 text-accent-700">
                   <Tags className="h-5 w-5" />
@@ -125,7 +148,7 @@ export default async function CategoriesPage() {
               </div>
             </div>
 
-            <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="editorial-special rounded-[26px] p-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
                   <Sparkles className="h-5 w-5" />
@@ -142,7 +165,7 @@ export default async function CategoriesPage() {
 
           <Link
             href="/catalog"
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-5 py-3 font-semibold text-white transition hover:opacity-90"
+            className="premium-button bg-[#155eef] text-white"
           >
             Ver catálogo completo
             <ArrowRight className="h-4 w-4" />
@@ -151,7 +174,7 @@ export default async function CategoriesPage() {
 
         <section className="space-y-5">
           {categories.length === 0 ? (
-            <div className="rounded-[32px] border border-dashed border-slate-300 bg-white p-10 text-center">
+            <div className="commercial-card rounded-[32px] border-dashed p-10 text-center">
               <Layers3 className="mx-auto h-10 w-10 text-slate-400" />
               <h2 className="mt-4 text-xl font-bold text-slate-950">
                 Todavía no hay categorías
@@ -166,7 +189,7 @@ export default async function CategoriesPage() {
               {categories.map((category) => (
                 <article
                   key={category.name}
-                  className="group rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
+                  className="group commercial-card rounded-[32px] p-5 transition duration-300 hover:-translate-y-1 hover:border-blue-200 hover:shadow-[0_30px_75px_rgba(21,94,239,0.13)]"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -189,7 +212,7 @@ export default async function CategoriesPage() {
                       </p>
                     </div>
 
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 transition group-hover:bg-black group-hover:text-white">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-[#155eef] transition group-hover:bg-[#155eef] group-hover:text-white">
                       <BookOpen className="h-5 w-5" />
                     </div>
                   </div>
@@ -233,7 +256,7 @@ export default async function CategoriesPage() {
                       href={`/catalog?category=${encodeURIComponent(
                         category.name
                       )}`}
-                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#155eef] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#2b78ff]"
                     >
                       Ver libros
                       <ArrowRight className="h-4 w-4" />
