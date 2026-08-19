@@ -9,6 +9,7 @@ import {
   LockKeyhole,
   ShieldCheck,
 } from "lucide-react";
+import { isImmersiveReaderRoute } from "@/lib/immersive-reader-route";
 
 const exploreLinks = [
   { href: "/catalog", label: "Explorar catálogo" },
@@ -32,7 +33,7 @@ const trustItems = [
 export function SiteFooter() {
   const pathname = usePathname();
 
-  if (pathname?.startsWith("/reader/")) {
+  if (isImmersiveReaderRoute(pathname)) {
     return null;
   }
 

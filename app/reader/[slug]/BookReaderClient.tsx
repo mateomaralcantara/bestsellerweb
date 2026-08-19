@@ -29,11 +29,25 @@ import type {
   PDFPageProxy,
 } from "pdfjs-dist/types/src/display/api";
 
+export type ReaderPreviewPage = {
+  imageUrl: string;
+  sourcePageNumber?: number | null;
+  width?: number | null;
+  height?: number | null;
+};
+
 type BookReaderClientProps = {
   title: string;
   coverUrl: string | null;
-  pdfUrl: string;
-  progressUrl: string;
+  pdfUrl?: string;
+  progressUrl?: string;
+  previewPages?: ReaderPreviewPage[];
+  progressKey?: string;
+  exitUrl?: string;
+  exitLabel?: string;
+  purchaseUrl?: string;
+  mode?: "full" | "preview";
+  onExit?: () => void;
 };
 
 type ViewMode = "single" | "spread";
@@ -442,6 +456,115 @@ function PdfThumbnail({
   );
 }
 
+function ImagePage({
+  page,
+  pageNumber,
+  fitMode,
+  zoom,
+  availableWidth,
+  availableHeight,
+  theme,
+}: {
+  page: ReaderPreviewPage;
+  pageNumber: number;
+  fitMode: FitMode;
+  zoom: number;
+  availableWidth: number;
+  availableHeight: number;
+  theme: ReaderTheme;
+}) {
+  const sourceWidth = Math.max(1, page.width || 1200);
+  const sourceHeight = Math.max(1, page.height || 1600);
+  const widthScale = Math.max(0.1, availableWidth / sourceWidth);
+  const heightScale = Math.max(0.1, availableHeight / sourceHeight);
+  const fittedScale =
+    fitMode === "width" ? widthScale : Math.min(widthScale, heightScale);
+  const scale = Math.max(0.1, fittedScale * zoom);
+  const displayWidth = Math.max(180, Math.round(sourceWidth * scale));
+  const displayHeight = Math.max(240, Math.round(sourceHeight * scale));
+
+  return (
+    <article className="relative shrink-0">
+      <div
+        className={[
+          "relative overflow-hidden rounded-md bg-white",
+          theme === "night"
+            ? "shadow-[0_24px_70px_rgba(0,0,0,0.55)]"
+            : "shadow-[0_24px_70px_rgba(15,23,42,0.18)]",
+        ].join(" ")}
+      >
+        <img
+          src={page.imageUrl}
+          alt={`Página ${page.sourcePageNumber ?? pageNumber}`}
+          draggable={false}
+          width={displayWidth}
+          height={displayHeight}
+          className={[
+            "block max-w-none select-none bg-white object-contain transition-[filter] duration-200",
+            theme === "sepia"
+              ? "sepia-[0.18] brightness-[0.98]"
+              : theme === "night"
+                ? "brightness-[0.78] contrast-[0.94]"
+                : "",
+          ].join(" ")}
+          style={{ width: displayWidth, height: displayHeight }}
+        />
+      </div>
+
+      <span className="sr-only">
+        Página {page.sourcePageNumber ?? pageNumber}
+      </span>
+    </article>
+  );
+}
+
+function ImageThumbnail({
+  page,
+  pageNumber,
+  active,
+  onSelect,
+}: {
+  page: ReaderPreviewPage;
+  pageNumber: number;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-page={pageNumber}
+      onClick={onSelect}
+      className={[
+        "group mx-auto block w-[142px] rounded-xl border p-2 text-left transition",
+        active
+          ? "border-blue-500 bg-blue-500/10 ring-2 ring-blue-500/30"
+          : "border-slate-700 bg-slate-900 hover:border-slate-500",
+      ].join(" ")}
+      aria-label={`Ir a la página ${page.sourcePageNumber ?? pageNumber}`}
+      aria-current={active ? "page" : undefined}
+    >
+      <div className="flex min-h-36 items-center justify-center overflow-hidden rounded-md bg-white shadow">
+        <img
+          src={page.imageUrl}
+          alt=""
+          loading="lazy"
+          draggable={false}
+          className="block max-h-44 w-full bg-white object-contain"
+        />
+      </div>
+
+      <span
+        className={[
+          "mt-2 block text-center text-xs font-bold",
+          active ? "text-blue-300" : "text-slate-400",
+        ].join(" ")}
+      >
+        {page.sourcePageNumber ?? pageNumber}
+      </span>
+    </button>
+  );
+}
+
 function ToolbarButton({
   label,
   active = false,
@@ -481,6 +604,13 @@ export default function BookReaderClient({
   coverUrl,
   pdfUrl,
   progressUrl,
+  previewPages,
+  progressKey,
+  exitUrl = "/dashboard",
+  exitLabel = "Volver a mi biblioteca",
+  purchaseUrl,
+  mode = "full",
+  onExit,
 }: BookReaderClientProps) {
   const shellRef = useRef<HTMLElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -514,33 +644,46 @@ export default function BookReaderClient({
     useState<ProgressSaveStatus>("loading");
   const [restoredPage, setRestoredPage] = useState<number | null>(null);
 
-  const totalPages = pdf?.numPages ?? 0;
+  const imagePages = useMemo(
+    () =>
+      (previewPages ?? [])
+        .filter((page) => Boolean(page.imageUrl))
+        .slice(0, 25),
+    [previewPages]
+  );
+  const totalPages = pdf?.numPages ?? imagePages.length;
+  const hasDocument = Boolean(pdf) || imagePages.length > 0;
   const isCompact = stageSize.width < 820;
   const effectiveViewMode: ViewMode = isCompact ? "single" : viewMode;
   const pageStep = effectiveViewMode === "spread" ? 2 : 1;
   const dark = theme === "night";
   const localProgressKey = useMemo(
-    () => `bestseller-reader-progress:${progressUrl}`,
-    [progressUrl]
+    () =>
+      `bestseller-reader-progress:${
+        progressKey || progressUrl || `${mode}:${title}`
+      }`,
+    [mode, progressKey, progressUrl, title]
   );
 
   const loadSavedProgress = useCallback(async (): Promise<ProgressRestoreResult> => {
     const localSnapshot = readLocalProgress(localProgressKey);
     let serverSnapshot: ProgressSnapshot | null = null;
 
-    try {
-      const response = await fetch(progressUrl, {
-        method: "GET",
-        cache: "no-store",
-        credentials: "same-origin",
-      });
+    if (progressUrl) {
+      try {
+        const response = await fetch(progressUrl, {
+          method: "GET",
+          cache: "no-store",
+          credentials: "same-origin",
+        });
 
-      if (response.ok) {
-        const body = (await response.json()) as { progress?: unknown };
-        serverSnapshot = parseProgressSnapshot(body.progress);
+        if (response.ok) {
+          const body = (await response.json()) as { progress?: unknown };
+          serverSnapshot = parseProgressSnapshot(body.progress);
+        }
+      } catch {
+        // La copia local permite continuar incluso sin conexión momentánea.
       }
-    } catch {
-      // La copia local permite continuar incluso sin conexión momentánea.
     }
 
     if (
@@ -570,6 +713,12 @@ export default function BookReaderClient({
   const saveProgressToServer = useCallback(
     async (snapshot: ProgressSnapshot) => {
       writeLocalProgress(localProgressKey, snapshot);
+
+      if (!progressUrl) {
+        setProgressSaveStatus("saved");
+        return;
+      }
+
       setProgressSaveStatus("saving");
 
       try {
@@ -693,7 +842,7 @@ export default function BookReaderClient({
     let cancelled = false;
     let localPdf: PDFDocumentProxy | null = null;
 
-    async function loadPdf() {
+    async function loadDocument() {
       try {
         progressInitializedRef.current = false;
         lastServerSavedPageRef.current = null;
@@ -703,6 +852,39 @@ export default function BookReaderClient({
         setError(null);
 
         const savedProgressPromise = loadSavedProgress();
+
+        if (!pdfUrl && imagePages.length > 0) {
+          const savedProgress = await savedProgressPromise;
+
+          if (cancelled) return;
+
+          const initialPage = clamp(
+            savedProgress.snapshot?.currentPage ?? 1,
+            1,
+            imagePages.length
+          );
+
+          setPdf(null);
+          setCurrentPage(initialPage);
+          setPageInput(String(initialPage));
+          currentPageRef.current = initialPage;
+          totalPagesRef.current = imagePages.length;
+          progressInitializedRef.current = true;
+
+          if (initialPage > 1) {
+            setRestoredPage(initialPage);
+            setProgressSaveStatus("restored");
+          } else {
+            setProgressSaveStatus("ready");
+          }
+
+          setLoading(false);
+          return;
+        }
+
+        if (!pdfUrl) {
+          throw new Error("No hay páginas disponibles para este lector.");
+        }
 
         const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
@@ -753,20 +935,22 @@ export default function BookReaderClient({
           progressInitializedRef.current = false;
           setLoading(false);
           setError(
-            "No se pudo abrir el libro. Actualiza la página o inicia sesión nuevamente."
+            mode === "preview"
+              ? "No se pudo abrir la muestra. Actualiza la página e inténtalo nuevamente."
+              : "No se pudo abrir el libro. Actualiza la página o inicia sesión nuevamente."
           );
         }
       }
     }
 
-    void loadPdf();
+    void loadDocument();
 
     return () => {
       cancelled = true;
       progressInitializedRef.current = false;
       void localPdf?.destroy();
     };
-  }, [loadSavedProgress, pdfUrl]);
+  }, [imagePages, loadSavedProgress, mode, pdfUrl]);
 
   useEffect(() => {
     currentPageRef.current = currentPage;
@@ -836,6 +1020,10 @@ export default function BookReaderClient({
       });
 
       writeLocalProgress(localProgressKey, snapshot);
+
+      if (!progressUrl) {
+        return;
+      }
 
       if (navigator.sendBeacon) {
         navigator.sendBeacon(
@@ -1030,7 +1218,7 @@ export default function BookReaderClient({
   }, [fitMode, theme, viewMode]);
 
   const visiblePages = useMemo(() => {
-    if (!pdf || totalPages === 0) return [];
+    if (totalPages === 0) return [];
 
     if (effectiveViewMode === "single") {
       return [currentPage];
@@ -1039,7 +1227,7 @@ export default function BookReaderClient({
     return [currentPage, currentPage + 1].filter(
       (pageNumber) => pageNumber <= totalPages
     );
-  }, [currentPage, effectiveViewMode, pdf, totalPages]);
+  }, [currentPage, effectiveViewMode, totalPages]);
 
   const pageWidth = useMemo(() => {
     const horizontalPadding = stageSize.width < 640 ? 24 : 72;
@@ -1106,14 +1294,26 @@ export default function BookReaderClient({
         ].join(" ")}
       >
         <div className="flex min-h-16 items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4">
-          <a
-            href="/dashboard"
-            aria-label="Salir del lector"
-            title="Volver a mi biblioteca"
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-slate-200 transition hover:border-slate-500 hover:bg-slate-800"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </a>
+          {onExit ? (
+            <button
+              type="button"
+              onClick={onExit}
+              aria-label="Salir del lector"
+              title={exitLabel}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-slate-200 transition hover:border-slate-500 hover:bg-slate-800"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+          ) : (
+            <a
+              href={exitUrl}
+              aria-label="Salir del lector"
+              title={exitLabel}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-slate-200 transition hover:border-slate-500 hover:bg-slate-800"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </a>
+          )}
 
           <ToolbarButton
             label={sidebarOpen ? "Ocultar miniaturas" : "Mostrar miniaturas"}
@@ -1130,6 +1330,15 @@ export default function BookReaderClient({
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
+            {mode === "preview" && purchaseUrl ? (
+              <a
+                href={purchaseUrl}
+                className="hidden h-10 items-center rounded-xl bg-amber-400 px-3 text-xs font-black text-slate-950 transition hover:bg-amber-300 sm:inline-flex"
+              >
+                Comprar libro
+              </a>
+            ) : null}
+
             <ToolbarButton
               label={
                 theme === "paper"
@@ -1349,26 +1558,36 @@ export default function BookReaderClient({
           </div>
 
           <div className="space-y-3">
-            {pdf
-              ? Array.from({ length: totalPages }, (_, index) => index + 1).map(
-                  (pageNumber) => (
+            {Array.from({ length: totalPages }, (_, index) => index + 1).map(
+              (pageNumber) => {
+                const active =
+                  pageNumber === currentPage ||
+                  (effectiveViewMode === "spread" &&
+                    pageNumber === currentPage + 1);
+                const onSelect = () => {
+                  setSafePage(pageNumber);
+                  if (window.innerWidth < 768) setSidebarOpen(false);
+                };
+
+                return pdf ? (
                     <PdfThumbnail
                       key={pageNumber}
                       pdf={pdf}
                       pageNumber={pageNumber}
-                      active={
-                        pageNumber === currentPage ||
-                        (effectiveViewMode === "spread" &&
-                          pageNumber === currentPage + 1)
-                      }
-                      onSelect={() => {
-                        setSafePage(pageNumber);
-                        if (window.innerWidth < 768) setSidebarOpen(false);
-                      }}
+                      active={active}
+                      onSelect={onSelect}
                     />
-                  )
-                )
-              : null}
+                ) : imagePages[pageNumber - 1] ? (
+                  <ImageThumbnail
+                    key={pageNumber}
+                    page={imagePages[pageNumber - 1]}
+                    pageNumber={pageNumber}
+                    active={active}
+                    onSelect={onSelect}
+                  />
+                ) : null;
+              }
+            )}
           </div>
         </aside>
 
@@ -1377,7 +1596,7 @@ export default function BookReaderClient({
           onClick={(event) => {
             const target = event.target as HTMLElement;
             if (target.closest("button, input, a")) return;
-            if (!pdf || loading || error || zoom > 1) return;
+            if (!hasDocument || loading || error || zoom > 1) return;
 
             const bounds = event.currentTarget.getBoundingClientRect();
             const position = (event.clientX - bounds.left) / bounds.width;
@@ -1465,7 +1684,11 @@ export default function BookReaderClient({
             <div className="flex h-full min-h-[520px] items-center justify-center p-6">
               <div className="rounded-2xl border border-slate-700 bg-slate-950/90 px-8 py-6 text-center text-white shadow-2xl">
                 <div className="mx-auto h-11 w-11 animate-spin rounded-full border-4 border-slate-700 border-t-blue-500" />
-                <p className="mt-4 font-black">Abriendo tu libro...</p>
+                <p className="mt-4 font-black">
+                  {mode === "preview"
+                    ? "Abriendo la muestra..."
+                    : "Abriendo tu libro..."}
+                </p>
                 <p className="mt-1 text-sm text-slate-400">
                   Preparando el lector de alta resolución
                 </p>
@@ -1485,7 +1708,7 @@ export default function BookReaderClient({
                 </button>
               </div>
             </div>
-          ) : pdf ? (
+          ) : hasDocument ? (
             <div
               className={[
                 "flex min-h-full min-w-full items-start justify-center gap-7 px-3 py-5 sm:px-8 sm:py-7",
@@ -1495,17 +1718,30 @@ export default function BookReaderClient({
               ].join(" ")}
             >
               {visiblePages.map((pageNumber) => (
-                <PdfPageCanvas
-                  key={`${pageNumber}-${fitMode}-${zoom}-${rotation}-${stageSize.width}-${stageSize.height}`}
-                  pdf={pdf}
-                  pageNumber={pageNumber}
-                  fitMode={fitMode}
-                  zoom={zoom}
-                  rotation={rotation}
-                  availableWidth={pageWidth}
-                  availableHeight={pageHeight}
-                  theme={theme}
-                />
+                pdf ? (
+                  <PdfPageCanvas
+                    key={`${pageNumber}-${fitMode}-${zoom}-${rotation}-${stageSize.width}-${stageSize.height}`}
+                    pdf={pdf}
+                    pageNumber={pageNumber}
+                    fitMode={fitMode}
+                    zoom={zoom}
+                    rotation={rotation}
+                    availableWidth={pageWidth}
+                    availableHeight={pageHeight}
+                    theme={theme}
+                  />
+                ) : imagePages[pageNumber - 1] ? (
+                  <ImagePage
+                    key={`${pageNumber}-${fitMode}-${zoom}-${stageSize.width}-${stageSize.height}`}
+                    page={imagePages[pageNumber - 1]}
+                    pageNumber={pageNumber}
+                    fitMode={fitMode}
+                    zoom={zoom}
+                    availableWidth={pageWidth}
+                    availableHeight={pageHeight}
+                    theme={theme}
+                  />
+                ) : null
               ))}
             </div>
           ) : null}

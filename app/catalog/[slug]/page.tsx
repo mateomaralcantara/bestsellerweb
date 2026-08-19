@@ -631,6 +631,7 @@ export default async function BookPublicPage({ params }: PageProps) {
                   authorName={authorName}
                   coverUrl={coverUrl}
                   checkoutUrl={checkoutUrl}
+                  previewUrl={`/catalog/${encodeURIComponent(book.slug)}/preview`}
                   pages={previewPages}
                   introduction={book.introduction}
                   chapterOneExcerpt={book.chapter_one_excerpt}

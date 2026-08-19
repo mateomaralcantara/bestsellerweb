@@ -13,6 +13,7 @@ import {
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/components/cart-provider";
+import { isImmersiveReaderRoute } from "@/lib/immersive-reader-route";
 
 const nav = [
   { href: "/catalog", label: "Catálogo" },
@@ -36,7 +37,7 @@ export function SiteHeader() {
     setOpen(false);
   }, [pathname]);
 
-  if (pathname?.startsWith("/reader/")) {
+  if (isImmersiveReaderRoute(pathname)) {
     return null;
   }
 
