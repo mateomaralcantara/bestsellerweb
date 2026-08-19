@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   BookOpenText,
   CreditCard,
@@ -27,6 +30,12 @@ const trustItems = [
 ];
 
 export function SiteFooter() {
+  const pathname = usePathname();
+
+  if (pathname?.startsWith("/reader/")) {
+    return null;
+  }
+
   return (
     <footer className="mt-16 overflow-hidden bg-[#07111f] text-white">
       <div className="border-b border-white/10 bg-gradient-to-r from-[#0d2f56] via-[#155eef] to-[#0b79a7]">

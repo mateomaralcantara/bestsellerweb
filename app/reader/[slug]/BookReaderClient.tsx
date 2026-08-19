@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowLeft,
   BookOpen,
   ChevronLeft,
   ChevronRight,
@@ -37,6 +38,7 @@ type BookReaderClientProps = {
 
 type ViewMode = "single" | "spread";
 type FitMode = "page" | "width";
+type ReaderTheme = "paper" | "sepia" | "night";
 type ProgressSaveStatus =
   | "loading"
   | "ready"
@@ -73,8 +75,9 @@ type DragState = {
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.25;
-const TOOLBAR_HEIGHT_ALLOWANCE = 64;
+const TOOLBAR_HEIGHT_ALLOWANCE = 24;
 const PROGRESS_SAVE_DELAY = 750;
+const CHROME_HIDE_DELAY = 2800;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -178,7 +181,7 @@ function PdfPageCanvas({
   rotation,
   availableWidth,
   availableHeight,
-  dark,
+  theme,
 }: {
   pdf: PDFDocumentProxy;
   pageNumber: number;
@@ -187,11 +190,12 @@ function PdfPageCanvas({
   rotation: number;
   availableWidth: number;
   availableHeight: number;
-  dark: boolean;
+  theme: ReaderTheme;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [rendering, setRendering] = useState(true);
   const [renderError, setRenderError] = useState(false);
+  const dark = theme === "night";
 
   useEffect(() => {
     let cancelled = false;
@@ -289,7 +293,14 @@ function PdfPageCanvas({
         <canvas
           ref={canvasRef}
           aria-label={`Página ${pageNumber}`}
-          className="block max-w-none bg-white"
+          className={[
+            "block max-w-none bg-white transition-[filter] duration-200",
+            theme === "sepia"
+              ? "sepia-[0.18] brightness-[0.98]"
+              : theme === "night"
+                ? "brightness-[0.78] contrast-[0.94]"
+                : "",
+          ].join(" ")}
         />
 
         {rendering ? (
@@ -305,16 +316,7 @@ function PdfPageCanvas({
         ) : null}
       </div>
 
-      <div
-        className={[
-          "mx-auto mt-3 w-fit rounded-full px-3 py-1 text-xs font-bold",
-          dark
-            ? "bg-slate-800 text-slate-300"
-            : "bg-white text-slate-500 shadow-sm",
-        ].join(" ")}
-      >
-        Página {pageNumber}
-      </div>
+      <span className="sr-only">Página {pageNumber}</span>
     </article>
   );
 }
@@ -488,6 +490,7 @@ export default function BookReaderClient({
   const currentPageRef = useRef(1);
   const totalPagesRef = useRef(0);
   const lastServerSavedPageRef = useRef<number | null>(null);
+  const chromeTimerRef = useRef<number | null>(null);
 
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(true);
@@ -499,7 +502,8 @@ export default function BookReaderClient({
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [dark, setDark] = useState(true);
+  const [chromeVisible, setChromeVisible] = useState(true);
+  const [theme, setTheme] = useState<ReaderTheme>("paper");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [stageSize, setStageSize] = useState<StageSize>({
     width: 1100,
@@ -511,7 +515,10 @@ export default function BookReaderClient({
   const [restoredPage, setRestoredPage] = useState<number | null>(null);
 
   const totalPages = pdf?.numPages ?? 0;
-  const pageStep = viewMode === "spread" ? 2 : 1;
+  const isCompact = stageSize.width < 820;
+  const effectiveViewMode: ViewMode = isCompact ? "single" : viewMode;
+  const pageStep = effectiveViewMode === "spread" ? 2 : 1;
+  const dark = theme === "night";
   const localProgressKey = useMemo(
     () => `bestseller-reader-progress:${progressUrl}`,
     [progressUrl]
@@ -633,6 +640,54 @@ export default function BookReaderClient({
       // Algunos navegadores móviles no exponen la API de pantalla completa.
     }
   }, []);
+
+  const scheduleChromeHide = useCallback(() => {
+    if (chromeTimerRef.current !== null) {
+      window.clearTimeout(chromeTimerRef.current);
+      chromeTimerRef.current = null;
+    }
+
+    if (loading || error || sidebarOpen) {
+      setChromeVisible(true);
+      return;
+    }
+
+    chromeTimerRef.current = window.setTimeout(() => {
+      setChromeVisible(false);
+      chromeTimerRef.current = null;
+    }, CHROME_HIDE_DELAY);
+  }, [error, loading, sidebarOpen]);
+
+  const revealChrome = useCallback(() => {
+    setChromeVisible(true);
+    scheduleChromeHide();
+  }, [scheduleChromeHide]);
+
+  const toggleChrome = useCallback(() => {
+    if (chromeVisible) {
+      if (chromeTimerRef.current !== null) {
+        window.clearTimeout(chromeTimerRef.current);
+        chromeTimerRef.current = null;
+      }
+
+      setChromeVisible(false);
+      return;
+    }
+
+    setChromeVisible(true);
+    window.setTimeout(scheduleChromeHide, 0);
+  }, [chromeVisible, scheduleChromeHide]);
+
+  useEffect(() => {
+    scheduleChromeHide();
+
+    return () => {
+      if (chromeTimerRef.current !== null) {
+        window.clearTimeout(chromeTimerRef.current);
+        chromeTimerRef.current = null;
+      }
+    };
+  }, [scheduleChromeHide]);
 
   useEffect(() => {
     let cancelled = false;
@@ -911,6 +966,9 @@ export default function BookReaderClient({
       } else if (event.key === "0") {
         event.preventDefault();
         resetView();
+      } else if (event.key === "Escape") {
+        setSidebarOpen(false);
+        setChromeVisible(false);
       }
     };
 
@@ -933,12 +991,27 @@ export default function BookReaderClient({
 
       const settings = JSON.parse(stored) as {
         dark?: boolean;
+        theme?: ReaderTheme;
         viewMode?: ViewMode;
+        fitMode?: FitMode;
       };
 
-      if (typeof settings.dark === "boolean") setDark(settings.dark);
+      if (
+        settings.theme === "paper" ||
+        settings.theme === "sepia" ||
+        settings.theme === "night"
+      ) {
+        setTheme(settings.theme);
+      } else if (typeof settings.dark === "boolean") {
+        setTheme(settings.dark ? "night" : "paper");
+      }
+
       if (settings.viewMode === "single" || settings.viewMode === "spread") {
         setViewMode(settings.viewMode);
+      }
+
+      if (settings.fitMode === "page" || settings.fitMode === "width") {
+        setFitMode(settings.fitMode);
       }
     } catch {
       // La preferencia local es opcional.
@@ -949,37 +1022,37 @@ export default function BookReaderClient({
     try {
       window.localStorage.setItem(
         "bestseller-reader-settings",
-        JSON.stringify({ dark, viewMode })
+        JSON.stringify({ theme, viewMode, fitMode })
       );
     } catch {
       // El lector sigue funcionando aunque localStorage esté bloqueado.
     }
-  }, [dark, viewMode]);
+  }, [fitMode, theme, viewMode]);
 
   const visiblePages = useMemo(() => {
     if (!pdf || totalPages === 0) return [];
 
-    if (viewMode === "single") {
+    if (effectiveViewMode === "single") {
       return [currentPage];
     }
 
     return [currentPage, currentPage + 1].filter(
       (pageNumber) => pageNumber <= totalPages
     );
-  }, [currentPage, pdf, totalPages, viewMode]);
+  }, [currentPage, effectiveViewMode, pdf, totalPages]);
 
   const pageWidth = useMemo(() => {
     const horizontalPadding = stageSize.width < 640 ? 24 : 72;
-    const spreadGap = viewMode === "spread" ? 28 : 0;
+    const spreadGap = effectiveViewMode === "spread" ? 28 : 0;
     const usableWidth = Math.max(
       260,
       stageSize.width - horizontalPadding - spreadGap
     );
 
-    return viewMode === "spread"
+    return effectiveViewMode === "spread"
       ? Math.max(240, usableWidth / 2)
       : Math.max(280, usableWidth);
-  }, [stageSize.width, viewMode]);
+  }, [effectiveViewMode, stageSize.width]);
 
   const pageHeight = Math.max(
     320,
@@ -989,29 +1062,17 @@ export default function BookReaderClient({
   const progress = totalPages
     ? Math.min(100, (currentPage / totalPages) * 100)
     : 0;
-  const progressStatusText = (() => {
-    if (progressSaveStatus === "loading") {
-      return "Buscando tu última página";
-    }
 
-    if (progressSaveStatus === "restored" && restoredPage) {
-      return `Continuamos en la página ${restoredPage}`;
-    }
-
-    if (progressSaveStatus === "saving") {
-      return "Guardando avance...";
-    }
-
-    if (progressSaveStatus === "local") {
-      return "Avance guardado en este dispositivo";
-    }
-
-    if (progressSaveStatus === "saved") {
-      return "Avance guardado";
-    }
-
-    return "Progreso automático activo";
-  })();
+  const progressStatusText =
+    progressSaveStatus === "loading"
+      ? "Buscando la última página"
+      : progressSaveStatus === "restored" && restoredPage
+        ? `Lectura restaurada en la página ${restoredPage}`
+        : progressSaveStatus === "saving"
+          ? "Guardando avance"
+          : progressSaveStatus === "local"
+            ? "Avance guardado localmente"
+            : "Avance guardado";
 
   function submitPage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1021,18 +1082,39 @@ export default function BookReaderClient({
   return (
     <section
       ref={shellRef}
+      onPointerMove={revealChrome}
+      onFocusCapture={revealChrome}
       className={[
-        "relative mx-auto flex w-full max-w-[1800px] flex-col overflow-hidden border",
-        isFullscreen
-          ? "h-screen rounded-none border-0"
-          : "h-[calc(100vh-9rem)] min-h-[680px] rounded-3xl",
+        "relative isolate mx-auto flex h-[100dvh] w-full flex-col overflow-hidden border-0",
         dark
-          ? "border-slate-800 bg-slate-950 text-white"
-          : "border-slate-200 bg-slate-100 text-slate-950",
+          ? "bg-[#101317] text-white"
+          : theme === "sepia"
+            ? "bg-[#d8cdb8] text-slate-950"
+            : "bg-[#ececea] text-slate-950",
       ].join(" ")}
     >
-      <header className="relative z-40 border-b border-slate-800 bg-slate-950 text-white shadow-xl">
+      <span className="sr-only" role="status" aria-live="polite">
+        {progressStatusText}
+      </span>
+
+      <header
+        className={[
+          "absolute inset-x-0 top-0 z-40 border-b border-white/10 bg-slate-950/95 text-white shadow-2xl backdrop-blur-xl transition duration-300",
+          chromeVisible
+            ? "translate-y-0 opacity-100"
+            : "pointer-events-none -translate-y-full opacity-0",
+        ].join(" ")}
+      >
         <div className="flex min-h-16 items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4">
+          <a
+            href="/dashboard"
+            aria-label="Salir del lector"
+            title="Volver a mi biblioteca"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-slate-200 transition hover:border-slate-500 hover:bg-slate-800"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </a>
+
           <ToolbarButton
             label={sidebarOpen ? "Ocultar miniaturas" : "Mostrar miniaturas"}
             active={sidebarOpen}
@@ -1045,35 +1127,31 @@ export default function BookReaderClient({
             <p className="truncate text-sm font-black">
               {title}
             </p>
-            <p className="flex min-w-0 items-center gap-1.5 text-xs text-slate-400">
-              <span className="shrink-0">
-              {totalPages ? `${totalPages} páginas` : "Preparando libro"}
-              </span>
-              <span className="shrink-0 text-slate-600">·</span>
-              <span
-                className={[
-                  "truncate",
-                  progressSaveStatus === "restored"
-                    ? "font-bold text-emerald-400"
-                    : progressSaveStatus === "local"
-                      ? "text-amber-300"
-                      : "text-slate-400",
-                ].join(" ")}
-              >
-                {progressStatusText}
-              </span>
-            </p>
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
             <ToolbarButton
-              label={dark ? "Fondo claro" : "Fondo oscuro"}
-              onClick={() => setDark((value) => !value)}
+              label={
+                theme === "paper"
+                  ? "Usar fondo sepia"
+                  : theme === "sepia"
+                    ? "Usar modo nocturno"
+                    : "Usar fondo claro"
+              }
+              onClick={() =>
+                setTheme((current) =>
+                  current === "paper"
+                    ? "sepia"
+                    : current === "sepia"
+                      ? "night"
+                      : "paper"
+                )
+              }
             >
-              {dark ? (
-                <Sun className="h-5 w-5" />
-              ) : (
+              {theme === "night" ? (
                 <Moon className="h-5 w-5" />
+              ) : (
+                <Sun className="h-5 w-5" />
               )}
             </ToolbarButton>
 
@@ -1208,15 +1286,20 @@ export default function BookReaderClient({
             <div className="flex items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-900/60 p-1">
             <ToolbarButton
               label="Una página"
-              active={viewMode === "single"}
+              active={effectiveViewMode === "single"}
               onClick={() => setViewMode("single")}
             >
               <Square className="h-5 w-5" />
             </ToolbarButton>
 
             <ToolbarButton
-              label="Dos páginas"
-              active={viewMode === "spread"}
+              label={
+                isCompact
+                  ? "Dos páginas requiere una pantalla más ancha"
+                  : "Dos páginas"
+              }
+              active={effectiveViewMode === "spread"}
+              disabled={isCompact}
               onClick={() => setViewMode("spread")}
             >
               <Columns2 className="h-5 w-5" />
@@ -1244,10 +1327,10 @@ export default function BookReaderClient({
         <aside
           ref={sidebarRef}
           className={[
-            "absolute inset-y-0 left-0 z-30 w-48 shrink-0 overflow-y-auto border-r border-slate-800 bg-slate-950 px-3 py-4 transition-transform duration-200 md:relative md:inset-auto",
+            "absolute inset-y-0 left-0 z-50 w-52 overflow-y-auto border-r border-slate-800 bg-slate-950 px-3 pb-5 pt-20 shadow-2xl transition-transform duration-300",
             sidebarOpen
-              ? "translate-x-0 md:block"
-              : "-translate-x-full md:hidden",
+              ? "translate-x-0"
+              : "pointer-events-none -translate-x-full",
           ].join(" ")}
         >
           <div className="mb-4 rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
@@ -1275,7 +1358,7 @@ export default function BookReaderClient({
                       pageNumber={pageNumber}
                       active={
                         pageNumber === currentPage ||
-                        (viewMode === "spread" &&
+                        (effectiveViewMode === "spread" &&
                           pageNumber === currentPage + 1)
                       }
                       onSelect={() => {
@@ -1291,11 +1374,21 @@ export default function BookReaderClient({
 
         <div
           ref={stageRef}
-          onDoubleClick={(event) => {
+          onClick={(event) => {
             const target = event.target as HTMLElement;
             if (target.closest("button, input, a")) return;
+            if (!pdf || loading || error || zoom > 1) return;
 
-            setZoom((current) => (current > 1 ? 1 : 1.5));
+            const bounds = event.currentTarget.getBoundingClientRect();
+            const position = (event.clientX - bounds.left) / bounds.width;
+
+            if (position < 0.28) {
+              goPrevious();
+            } else if (position > 0.72) {
+              goNext();
+            } else {
+              toggleChrome();
+            }
           }}
           onPointerDown={(event) => {
             const stage = stageRef.current;
@@ -1322,6 +1415,8 @@ export default function BookReaderClient({
             setIsDragging(true);
           }}
           onPointerMove={(event) => {
+            revealChrome();
+
             const stage = stageRef.current;
             const drag = dragRef.current;
 
@@ -1344,9 +1439,11 @@ export default function BookReaderClient({
           }}
           className={[
             "relative min-w-0 flex-1 overflow-auto overscroll-contain",
-            dark
-              ? "bg-[radial-gradient(circle_at_top,#1e293b_0%,#020617_62%)]"
-              : "bg-[radial-gradient(circle_at_top,#ffffff_0%,#e2e8f0_70%)]",
+            theme === "night"
+              ? "bg-[#101317]"
+              : theme === "sepia"
+                ? "bg-[#d8cdb8]"
+                : "bg-[#ececea]",
             zoom > 1
               ? isDragging
                 ? "cursor-grabbing select-none"
@@ -1358,7 +1455,7 @@ export default function BookReaderClient({
           {sidebarOpen ? (
             <button
               type="button"
-              className="absolute inset-0 z-20 bg-black/45 md:hidden"
+              className="absolute inset-0 z-40 bg-black/35 backdrop-blur-[1px]"
               onClick={() => setSidebarOpen(false)}
               aria-label="Cerrar miniaturas"
             />
@@ -1391,8 +1488,10 @@ export default function BookReaderClient({
           ) : pdf ? (
             <div
               className={[
-                "flex min-h-full min-w-full items-start justify-center gap-7 p-3 sm:p-8",
-                viewMode === "spread" ? "flex-row" : "flex-col items-center",
+                "flex min-h-full min-w-full items-start justify-center gap-7 px-3 py-5 sm:px-8 sm:py-7",
+                effectiveViewMode === "spread"
+                  ? "flex-row"
+                  : "flex-col items-center",
               ].join(" ")}
             >
               {visiblePages.map((pageNumber) => (
@@ -1405,7 +1504,7 @@ export default function BookReaderClient({
                   rotation={rotation}
                   availableWidth={pageWidth}
                   availableHeight={pageHeight}
-                  dark={dark}
+                  theme={theme}
                 />
               ))}
             </div>
@@ -1413,7 +1512,14 @@ export default function BookReaderClient({
         </div>
       </div>
 
-      <footer className="relative z-40 flex min-h-14 items-center justify-between gap-3 border-t border-slate-800 bg-slate-950 px-3 text-white sm:px-4">
+      <footer
+        className={[
+          "absolute inset-x-0 bottom-0 z-40 flex min-h-14 items-center justify-between gap-3 border-t border-white/10 bg-slate-950/95 px-3 text-white shadow-[0_-18px_45px_rgba(0,0,0,0.22)] backdrop-blur-xl transition duration-300 sm:px-4",
+          chromeVisible
+            ? "translate-y-0 opacity-100"
+            : "pointer-events-none translate-y-full opacity-0",
+        ].join(" ")}
+      >
         <button
           type="button"
           onClick={goPrevious}
@@ -1427,9 +1533,6 @@ export default function BookReaderClient({
         <div className="text-center">
           <p className="text-sm font-black">
             Página {currentPage} de {totalPages || "–"}
-          </p>
-          <p className="hidden text-[11px] text-slate-500 sm:block">
-            Flechas: navegar · +/-: zoom · F: pantalla completa
           </p>
         </div>
 

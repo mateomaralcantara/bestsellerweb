@@ -36,6 +36,10 @@ export function SiteHeader() {
     setOpen(false);
   }, [pathname]);
 
+  if (pathname?.startsWith("/reader/")) {
+    return null;
+  }
+
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-[#07111f]/95 text-white shadow-[0_12px_45px_rgba(2,8,23,0.18)] backdrop-blur-xl">
       <div className="border-b border-white/10 bg-gradient-to-r from-[#155eef] via-[#0b70d8] to-[#13a8d8]">
