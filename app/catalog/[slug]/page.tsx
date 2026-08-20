@@ -23,6 +23,7 @@ import {
 } from "@/components/books/LookInsidePreview";
 import { CatalogPurchaseActions } from "@/components/payments/catalog-purchase-actions";
 import { BookSocialProof } from "@/components/books/BookSocialProof";
+import { BookComments } from "@/components/books/BookComments";
 import { getBookSocialProof } from "@/lib/book-social-proof";
 
 export const dynamic = "force-dynamic";
@@ -936,6 +937,10 @@ export default async function BookPublicPage({ params }: PageProps) {
               </div>
             </section>
 
+            <BookComments
+              bookSlug={book.slug}
+              bookTitle={book.title}
+            />
             {book.sample_url ? (
               <section className="commercial-card rounded-[28px] p-6">
                 <h2 className="text-xl font-black text-[#07111f]">
