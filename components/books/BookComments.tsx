@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   Loader2,
   MessageCircle,
+  Sparkles,
   Star,
   Trash2,
 } from "lucide-react";
@@ -21,6 +22,16 @@ type BookComment = {
   canManage: boolean;
 };
 
+type EditorialComment = {
+  id: string;
+  displayOrder: number;
+  comment: string;
+  createdAt: string;
+  updatedAt: string;
+  label: string;
+  disclaimer: string;
+};
+
 type CommentsResponse = {
   ok?: boolean;
   error?: string;
@@ -31,6 +42,7 @@ type CommentsResponse = {
   viewer?: {
     authenticated: boolean;
   };
+  editorialComments?: EditorialComment[];
   comments?: BookComment[];
 };
 
@@ -82,6 +94,9 @@ export function BookComments({ bookSlug, bookTitle }: BookCommentsProps) {
   const signInUrl = `/auth?next=${encodeURIComponent(`/catalog/${bookSlug}`)}`;
 
   const [comments, setComments] = useState<BookComment[]>([]);
+  const [editorialComments, setEditorialComments] = useState<
+    EditorialComment[]
+  >([]);
   const [averageRating, setAverageRating] = useState<number | null>(null);
   const [totalComments, setTotalComments] = useState(0);
   const [authenticated, setAuthenticated] = useState(false);
@@ -113,6 +128,7 @@ export function BookComments({ bookSlug, bookTitle }: BookCommentsProps) {
       const ownComment = nextComments.find((item) => item.canManage);
 
       setComments(nextComments);
+      setEditorialComments(payload.editorialComments ?? []);
       setAverageRating(payload.summary?.averageRating ?? null);
       setTotalComments(payload.summary?.totalComments ?? nextComments.length);
       setAuthenticated(Boolean(payload.viewer?.authenticated));
@@ -424,6 +440,55 @@ export function BookComments({ bookSlug, bookTitle }: BookCommentsProps) {
               </article>
             ))}
           </div>
+        ) : null}
+
+        {!loading && editorialComments.length > 0 ? (
+          <section
+            aria-labelledby="comentarios-editoriales-title"
+            className="rounded-[24px] border border-indigo-200 bg-gradient-to-br from-indigo-50 via-white to-violet-50 p-5 sm:p-6"
+          >
+            <div className="flex items-start gap-3">
+              <span className="rounded-2xl bg-indigo-100 p-2.5 text-indigo-700">
+                <Sparkles className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div>
+                <h3
+                  id="comentarios-editoriales-title"
+                  className="font-black text-slate-950"
+                >
+                  Comentarios editoriales automáticos
+                </h3>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+                  Estos textos presentan el enfoque del libro. No son reseñas
+                  de compradores y no afectan su puntuación pública.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              {editorialComments.map((item) => (
+                <article
+                  key={item.id}
+                  className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-indigo-700">
+                      Editorial automático
+                    </span>
+                    <span className="text-xs font-bold text-slate-400">
+                      {item.displayOrder} de {editorialComments.length}
+                    </span>
+                  </div>
+                  <p className="mt-3 leading-7 text-slate-700">
+                    {item.comment}
+                  </p>
+                  <p className="mt-3 text-xs font-semibold text-slate-400">
+                    {item.disclaimer}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </section>
         ) : null}
       </div>
     </section>

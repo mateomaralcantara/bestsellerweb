@@ -26,6 +26,14 @@ type CommentRow = {
   updated_at: string;
 };
 
+type EditorialCommentRow = {
+  id: string;
+  display_order: number;
+  comment_text: string;
+  created_at: string;
+  updated_at: string;
+};
+
 type ProfileRow = {
   id: string;
   full_name: string | null;
@@ -155,22 +163,44 @@ export async function GET(_request: Request, { params }: RouteContext) {
       return jsonResponse({ error: "Libro no encontrado." }, 404);
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("book_comments")
-      .select(
-        "id, user_id, rating, comment_text, is_verified_purchase, created_at, updated_at"
-      )
-      .eq("book_id", book.id)
-      .eq("status", "published")
-      .order("created_at", { ascending: false })
-      .returns<CommentRow[]>();
+    const [commentsResult, editorialResult] = await Promise.all([
+      supabaseAdmin
+        .from("book_comments")
+        .select(
+          "id, user_id, rating, comment_text, is_verified_purchase, created_at, updated_at"
+        )
+        .eq("book_id", book.id)
+        .eq("status", "published")
+        .order("created_at", { ascending: false })
+        .returns<CommentRow[]>(),
+      supabaseAdmin
+        .from("book_editorial_comments")
+        .select("id, display_order, comment_text, created_at, updated_at")
+        .eq("book_id", book.id)
+        .order("display_order", { ascending: true })
+        .returns<EditorialCommentRow[]>(),
+    ]);
 
-    if (error) {
-      console.error("Error cargando comentarios:", error.message);
+    if (commentsResult.error) {
+      console.error(
+        "Error cargando comentarios:",
+        commentsResult.error.message
+      );
       return jsonResponse({ error: "No se pudieron cargar las reseñas." }, 500);
     }
 
-    const rows = data ?? [];
+    if (editorialResult.error) {
+      console.error(
+        "Error cargando comentarios editoriales:",
+        editorialResult.error.message
+      );
+      return jsonResponse(
+        { error: "No se pudieron cargar los comentarios editoriales." },
+        500
+      );
+    }
+
+    const rows = commentsResult.data ?? [];
     const userIds = [...new Set(rows.map((row) => row.user_id))];
     const profilesById = new Map<string, ProfileRow>();
 
@@ -202,6 +232,15 @@ export async function GET(_request: Request, { params }: RouteContext) {
       viewer: {
         authenticated: Boolean(viewer),
       },
+      editorialComments: (editorialResult.data ?? []).map((row) => ({
+        id: row.id,
+        displayOrder: Number(row.display_order),
+        comment: row.comment_text,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        label: "Comentario editorial automático",
+        disclaimer: "No representa la opinión de un comprador.",
+      })),
       comments: rows.map((row) => ({
         id: row.id,
         rating: Number(row.rating),
