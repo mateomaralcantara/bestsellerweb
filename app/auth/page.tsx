@@ -6,6 +6,7 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
+import { headers } from "next/headers";
 import { AuthForm } from "@/components/forms/auth-form";
 
 const roles = [
@@ -15,7 +16,22 @@ const roles = [
   { icon: ShieldCheck, label: "Administrador", text: "Opera la plataforma." },
 ];
 
-export default function AuthPage() {
+type AuthPageProps = {
+  searchParams?: Promise<{ next?: string | string[] }>;
+};
+
+function safeNextPath(value: string | string[] | undefined) {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  return candidate?.startsWith("/") && !candidate.startsWith("//")
+    ? candidate
+    : "/dashboard";
+}
+
+export default async function AuthPage({ searchParams }: AuthPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const nextPath = safeNextPath(resolvedSearchParams?.next);
+  const nonce = (await headers()).get("x-nonce") || undefined;
+
   return (
     <main className="relative overflow-hidden py-12 sm:py-16 lg:py-20">
       <div className="pointer-events-none absolute -left-32 top-0 h-96 w-96 rounded-full bg-blue-200/35 blur-3xl" />
@@ -64,7 +80,7 @@ export default function AuthPage() {
             Inicia sesión o crea una cuenta para comenzar.
           </p>
           <div className="mt-8">
-            <AuthForm />
+            <AuthForm nextPath={nextPath} nonce={nonce} />
           </div>
         </section>
       </div>

@@ -3,9 +3,18 @@ import {
   getPayPalClientId,
   getPayPalClientSecret,
 } from "@/lib/paypal/config";
+import { createHash } from "node:crypto";
 
 type CachedToken = { value: string; expiresAt: number };
 let cachedToken: CachedToken | null = null;
+const PAYPAL_TIMEOUT_MS = 15_000;
+
+function idempotencyKey(operation: string, localOrderId: string) {
+  return createHash("sha256")
+    .update(`${operation}:${localOrderId}`)
+    .digest("hex")
+    .slice(0, 32);
+}
 
 export class PayPalApiError extends Error {
   constructor(
@@ -39,6 +48,7 @@ async function getAccessToken() {
       },
       body: "grant_type=client_credentials",
       cache: "no-store",
+      signal: AbortSignal.timeout(PAYPAL_TIMEOUT_MS),
     }
   );
 
@@ -68,6 +78,7 @@ async function requestPayPal<T>(
     method?: "GET" | "POST";
     body?: unknown;
     requestId?: string;
+    preferRepresentation?: boolean;
   } = {}
 ): Promise<T> {
   const token = await getAccessToken();
@@ -82,6 +93,10 @@ async function requestPayPal<T>(
     headers["PayPal-Request-Id"] = options.requestId;
   }
 
+  if (options.preferRepresentation) {
+    headers.Prefer = "return=representation";
+  }
+
   const response = await fetch(`${getPayPalBaseUrl()}${path}`, {
     method: options.method || "GET",
     headers,
@@ -90,6 +105,7 @@ async function requestPayPal<T>(
         ? undefined
         : JSON.stringify(options.body),
     cache: "no-store",
+    signal: AbortSignal.timeout(PAYPAL_TIMEOUT_MS),
   });
 
   const text = await response.text();
@@ -118,6 +134,9 @@ export type PayPalOrder = {
   id: string;
   status: string;
   purchase_units?: Array<{
+    reference_id?: string;
+    custom_id?: string;
+    invoice_id?: string;
     amount?: { currency_code?: string; value?: string };
     payments?: {
       captures?: Array<{
@@ -138,7 +157,8 @@ export function createPayPalOrder(input: {
 }) {
   return requestPayPal<PayPalOrder>("/v2/checkout/orders", {
     method: "POST",
-    requestId: `create-${input.localOrderId}`,
+    requestId: idempotencyKey("create", input.localOrderId),
+    preferRepresentation: true,
     body: {
       intent: "CAPTURE",
       purchase_units: [
@@ -173,9 +193,16 @@ export function capturePayPalOrder(
     `/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}/capture`,
     {
       method: "POST",
-      requestId: `capture-${localOrderId}`,
+      requestId: idempotencyKey("capture", localOrderId),
+      preferRepresentation: true,
       body: {},
     }
+  );
+}
+
+export function getPayPalOrder(paypalOrderId: string) {
+  return requestPayPal<PayPalOrder>(
+    `/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}`
   );
 }
 

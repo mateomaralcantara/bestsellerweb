@@ -527,6 +527,8 @@ export default function EditBookForm({ book, edition }: EditBookFormProps) {
     try {
       const response = await fetch(`/api/books/${encodeURIComponent(book.id)}`, {
         method: "PATCH",
+        headers: { "X-BestSeller-Request": "1" },
+        credentials: "same-origin",
         body: formData,
       });
 
@@ -1199,4 +1201,3 @@ export default function EditBookForm({ book, edition }: EditBookFormProps) {
     </main>
   );
 }
-

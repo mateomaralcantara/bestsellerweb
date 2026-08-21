@@ -164,6 +164,7 @@ export function BookComments({ bookSlug, bookTitle }: BookCommentsProps) {
         credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
+          "X-BestSeller-Request": "1",
         },
         body: JSON.stringify({ rating, comment }),
       });
@@ -203,6 +204,7 @@ export function BookComments({ bookSlug, bookTitle }: BookCommentsProps) {
         credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
+          "X-BestSeller-Request": "1",
         },
         body: JSON.stringify({ commentId }),
       });

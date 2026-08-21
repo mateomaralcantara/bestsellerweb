@@ -7,9 +7,17 @@ function required(name: string) {
 }
 
 export function getPayPalEnvironment(): PayPalEnvironment {
-  return process.env.PAYPAL_ENV?.trim().toLowerCase() === "live"
-    ? "live"
-    : "sandbox";
+  const value = process.env.PAYPAL_ENV?.trim().toLowerCase();
+
+  if (value === "live" || value === "sandbox") {
+    return value;
+  }
+
+  if (!value && process.env.NODE_ENV !== "production") {
+    return "sandbox";
+  }
+
+  throw new Error("PAYPAL_ENV debe ser exactamente sandbox o live.");
 }
 
 export function getPayPalBaseUrl() {

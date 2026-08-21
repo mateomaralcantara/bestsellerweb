@@ -714,6 +714,8 @@ export default function NewBookForm() {
     try {
       const response = await fetch("/api/books", {
         method: "POST",
+        headers: { "X-BestSeller-Request": "1" },
+        credentials: "same-origin",
         body: formData,
       });
 
@@ -1433,7 +1435,6 @@ export default function NewBookForm() {
     </main>
   );
 }
-
 
 
 

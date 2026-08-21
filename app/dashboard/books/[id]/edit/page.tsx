@@ -5,9 +5,9 @@ import EditBookForm from "./EditBookForm";
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
 type BookForEdit = {
@@ -107,7 +107,8 @@ function getEditLoginRedirect(bookId: string) {
 }
 
 export default async function EditBookPage({ params }: PageProps) {
-  const bookId = normalizeBookId(params.id);
+  const { id: rawId } = await params;
+  const bookId = normalizeBookId(rawId);
 
   if (!bookId) {
     notFound();

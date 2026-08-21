@@ -1,14 +1,21 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import {
+  errorStatus,
+  publicErrorMessage,
+  readJsonBody,
+  requireTrustedMutation,
+} from "@/lib/security/http";
+import { consumeRateLimit } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     bookkey: string;
-  };
+  }>;
 };
 
 type BookRow = {
@@ -146,12 +153,33 @@ function getAverageRating(comments: CommentRow[]) {
   return Math.round((total / comments.length) * 10) / 10;
 }
 
-export async function GET(_request: Request, { params }: RouteContext) {
+export async function GET(request: Request, { params }: RouteContext) {
   try {
-    const bookkey = safeBookKey(params.bookkey);
+    const { bookkey: rawBookkey } = await params;
+    const bookkey = safeBookKey(rawBookkey);
 
     if (!bookkey) {
       return jsonResponse({ error: "Libro inválido." }, 400);
+    }
+
+    const rateLimit = await consumeRateLimit(request, {
+      bucket: "comments:read",
+      identity: bookkey,
+      limit: 120,
+      windowSeconds: 60,
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Demasiadas consultas de reseñas." },
+        {
+          status: 429,
+          headers: {
+            "Cache-Control": "private, no-store, max-age=0",
+            "Retry-After": String(rateLimit.retryAfterSeconds),
+          },
+        }
+      );
     }
 
     const [book, viewer] = await Promise.all([
@@ -172,12 +200,14 @@ export async function GET(_request: Request, { params }: RouteContext) {
         .eq("book_id", book.id)
         .eq("status", "published")
         .order("created_at", { ascending: false })
+        .limit(200)
         .returns<CommentRow[]>(),
       supabaseAdmin
         .from("book_editorial_comments")
         .select("id, display_order, comment_text, created_at, updated_at")
         .eq("book_id", book.id)
         .order("display_order", { ascending: true })
+        .limit(10)
         .returns<EditorialCommentRow[]>(),
     ]);
 
@@ -262,7 +292,10 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
 export async function POST(request: Request, { params }: RouteContext) {
   try {
-    const bookkey = safeBookKey(params.bookkey);
+    requireTrustedMutation(request);
+
+    const { bookkey: rawBookkey } = await params;
+    const bookkey = safeBookKey(rawBookkey);
 
     if (!bookkey) {
       return jsonResponse({ error: "Libro inválido." }, 400);
@@ -277,13 +310,24 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    let payload: CommentPayload;
+    const rateLimit = await consumeRateLimit(request, {
+      bucket: "comments:write",
+      identity: viewer.id,
+      limit: 10,
+      windowSeconds: 3_600,
+    });
 
-    try {
-      payload = (await request.json()) as CommentPayload;
-    } catch {
-      return jsonResponse({ error: "Datos de reseña inválidos." }, 400);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Has realizado demasiados cambios en reseñas." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+        }
+      );
     }
+
+    const payload = await readJsonBody<CommentPayload>(request, 4_096);
 
     const rating = parseRating(payload.rating);
     const comment = cleanComment(payload.comment);
@@ -311,6 +355,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       .eq("user_id", viewer.id)
       .eq("book_id", book.id)
       .in("status", [...ACTIVE_PURCHASE_STATUSES])
+      .is("revoked_at", null)
       .limit(1)
       .maybeSingle();
 
@@ -356,26 +401,43 @@ export async function POST(request: Request, { params }: RouteContext) {
     );
   } catch (error) {
     console.error("POST /api/books/[bookkey]/comments error:", error);
-    return jsonResponse({ error: "Error publicando la reseña." }, 500);
+    return jsonResponse(
+      { error: publicErrorMessage(error, "Error publicando la reseña.") },
+      errorStatus(error)
+    );
   }
 }
 
 export async function DELETE(request: Request, { params }: RouteContext) {
   try {
-    const bookkey = safeBookKey(params.bookkey);
+    requireTrustedMutation(request);
+
+    const { bookkey: rawBookkey } = await params;
+    const bookkey = safeBookKey(rawBookkey);
     const viewer = await getViewer();
 
     if (!viewer) {
       return jsonResponse({ error: "Debes iniciar sesión." }, 401);
     }
 
-    let payload: CommentPayload;
+    const rateLimit = await consumeRateLimit(request, {
+      bucket: "comments:delete",
+      identity: viewer.id,
+      limit: 10,
+      windowSeconds: 3_600,
+    });
 
-    try {
-      payload = (await request.json()) as CommentPayload;
-    } catch {
-      return jsonResponse({ error: "Solicitud inválida." }, 400);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Has realizado demasiados cambios en reseñas." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+        }
+      );
     }
+
+    const payload = await readJsonBody<CommentPayload>(request, 2_048);
 
     const commentId =
       typeof payload.commentId === "string" ? payload.commentId.trim() : "";
@@ -411,6 +473,9 @@ export async function DELETE(request: Request, { params }: RouteContext) {
     return jsonResponse({ ok: true });
   } catch (error) {
     console.error("DELETE /api/books/[bookkey]/comments error:", error);
-    return jsonResponse({ error: "Error eliminando la reseña." }, 500);
+    return jsonResponse(
+      { error: publicErrorMessage(error, "Error eliminando la reseña.") },
+      errorStatus(error)
+    );
   }
 }

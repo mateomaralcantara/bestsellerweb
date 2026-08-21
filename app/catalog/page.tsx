@@ -12,10 +12,10 @@ import type { Book } from "@/lib/types";
 import { BookSocialProof } from "@/components/books/BookSocialProof";
 
 type CatalogPageProps = {
-  searchParams?: {
-    category?: string;
-    q?: string;
-  };
+  searchParams?: Promise<{
+    category?: string | string[];
+    q?: string | string[];
+  }>;
 };
 
 type CatalogAuthor = {
@@ -540,6 +540,7 @@ function AmazonBookRow({ book }: { book: CatalogBook }) {
 ========================================================= */
 
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const [rawBooks, rawCategories] = await Promise.all([
     getBooks(),
     getBookCategories(),
@@ -548,8 +549,14 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   const books = rawBooks as CatalogBook[];
   const baseCategories = rawCategories as string[];
 
-  const selectedCategory = searchParams?.category?.trim() || "";
-  const query = searchParams?.q?.trim() || "";
+  const rawCategory = Array.isArray(resolvedSearchParams?.category)
+    ? resolvedSearchParams?.category[0]
+    : resolvedSearchParams?.category;
+  const rawQuery = Array.isArray(resolvedSearchParams?.q)
+    ? resolvedSearchParams?.q[0]
+    : resolvedSearchParams?.q;
+  const selectedCategory = rawCategory?.trim().slice(0, 120) || "";
+  const query = rawQuery?.trim().slice(0, 120) || "";
 
   const sidebarCategories = getSidebarCategories({
     books,

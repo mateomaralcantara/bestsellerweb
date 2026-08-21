@@ -17,9 +17,9 @@ import {
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     q?: string | string[];
-  };
+  }>;
 };
 
 type UserPurchaseGroup = {
@@ -30,7 +30,7 @@ type UserPurchaseGroup = {
   latestPurchaseAt: string | null;
 };
 
-function readSearch(searchParams?: PageProps["searchParams"]) {
+function readSearch(searchParams?: { q?: string | string[] }) {
   const raw = searchParams?.q;
   return (Array.isArray(raw) ? raw[0] : raw || "").trim().slice(0, 120);
 }
@@ -184,6 +184,7 @@ function AccessDenied() {
 }
 
 export default async function PurchasesPage({ searchParams }: PageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const access = await getAdminAccess();
 
   if (!access.user) {
@@ -204,7 +205,7 @@ export default async function PurchasesPage({ searchParams }: PageProps) {
       error instanceof Error ? error.message : "No se pudo cargar el registro.";
   }
 
-  const search = readSearch(searchParams);
+  const search = readSearch(resolvedSearchParams);
   const visiblePurchases = filterPurchases(purchases, search);
   const groups = groupByUser(visiblePurchases);
   const uniqueBooks = new Set(visiblePurchases.map((row) => row.bookId)).size;

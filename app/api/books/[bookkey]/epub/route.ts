@@ -5,14 +5,18 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { consumeRateLimit } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const FILE_BUCKET = "book-files";
+const MAX_EPUB_BYTES = 100 * 1024 * 1024;
+
 type RouteContext = {
-  params: {
+  params: Promise<{
     bookkey: string;
-  };
+  }>;
 };
 
 type ReadMode = "preview" | "full";
@@ -41,12 +45,22 @@ function jsonError(message: string, status = 400) {
       ok: false,
       error: message,
     },
-    { status }
+    {
+      status,
+      headers: { "Cache-Control": "private, no-store, max-age=0" },
+    }
   );
 }
 
 function safeBookKey(value: string) {
-  return decodeURIComponent(value || "").trim();
+  try {
+    const bookKey = decodeURIComponent(value || "").trim();
+    return /^[a-z0-9-]{1,160}$/i.test(bookKey) || isUuid(bookKey)
+      ? bookKey
+      : "";
+  } catch {
+    return "";
+  }
 }
 
 function isUuid(value: string) {
@@ -73,6 +87,15 @@ function safeFileName(title: string | null) {
       .toLowerCase() || "libro";
 
   return `${clean}.epub`;
+}
+
+function isSafeStoragePath(value: string) {
+  return (
+    value.length <= 1_024 &&
+    !value.includes("\\") &&
+    !value.includes("\0") &&
+    value.split("/").every((segment) => segment && segment !== "." && segment !== "..")
+  );
 }
 
 async function getBookByKey(bookkey: string) {
@@ -135,6 +158,7 @@ async function userCanReadFullBook(book: BookRecord) {
     .eq("book_id", book.id)
     .eq("user_id", user.id)
     .in("status", ["paid", "completed", "approved", "succeeded"])
+    .is("revoked_at", null)
     .limit(1)
     .maybeSingle();
 
@@ -147,7 +171,11 @@ async function userCanReadFullBook(book: BookRecord) {
 }
 
 async function downloadEpubAsset(asset: BookAsset) {
-  if (!asset.storage_bucket || !asset.storage_path) {
+  if (
+    asset.storage_bucket !== FILE_BUCKET ||
+    !asset.storage_path ||
+    !isSafeStoragePath(asset.storage_path)
+  ) {
     return {
       ok: false as const,
       error: "El asset EPUB no tiene bucket o ruta de Storage.",
@@ -162,17 +190,35 @@ async function downloadEpubAsset(asset: BookAsset) {
   if (error || !file) {
     return {
       ok: false as const,
-      error: error?.message || "No se pudo descargar el EPUB desde Storage.",
+      error: "No se pudo descargar el EPUB desde Storage.",
       arrayBuffer: null,
     };
   }
 
   const arrayBuffer = await file.arrayBuffer();
 
-  if (!arrayBuffer || arrayBuffer.byteLength <= 0) {
+  if (
+    !arrayBuffer ||
+    arrayBuffer.byteLength < 4 ||
+    arrayBuffer.byteLength > MAX_EPUB_BYTES
+  ) {
     return {
       ok: false as const,
       error: "El EPUB descargado está vacío.",
+      arrayBuffer: null,
+    };
+  }
+
+  const prefix = new Uint8Array(arrayBuffer, 0, 4);
+  if (
+    prefix[0] !== 0x50 ||
+    prefix[1] !== 0x4b ||
+    prefix[2] !== 0x03 ||
+    prefix[3] !== 0x04
+  ) {
+    return {
+      ok: false as const,
+      error: "El archivo almacenado no tiene una firma EPUB/ZIP válida.",
       arrayBuffer: null,
     };
   }
@@ -186,16 +232,38 @@ async function downloadEpubAsset(asset: BookAsset) {
 
 export async function GET(request: Request, { params }: RouteContext) {
   try {
-    const bookkey = safeBookKey(params.bookkey);
+    const { bookkey: rawBookkey } = await params;
+    const bookkey = safeBookKey(rawBookkey);
 
     if (!bookkey) {
       return jsonError("Identificador de libro inválido.", 400);
     }
 
     const mode = getReadMode(request);
+    const rateLimit = await consumeRateLimit(request, {
+      bucket: mode === "full" ? "books:epub-full" : "books:epub-preview",
+      identity: bookkey,
+      limit: mode === "full" ? 30 : 20,
+      windowSeconds: 60,
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { ok: false, error: "Demasiadas solicitudes de lectura." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+        }
+      );
+    }
+
     const book = await getBookByKey(bookkey);
 
     if (!book) {
+      return jsonError("Libro no encontrado.", 404);
+    }
+
+    if (mode === "preview" && book.status !== "published") {
       return jsonError("Libro no encontrado.", 404);
     }
 
@@ -229,21 +297,20 @@ export async function GET(request: Request, { params }: RouteContext) {
       return jsonError(downloaded.error, 500);
     }
 
-    const contentType = asset.mime_type || "application/epub+zip";
     const fileName = safeFileName(book.title);
 
     return new NextResponse(downloaded.arrayBuffer, {
       status: 200,
       headers: {
-        "Content-Type": contentType,
+        "Content-Type": "application/epub+zip",
         "Content-Length": String(downloaded.arrayBuffer.byteLength),
-        "Content-Disposition": `inline; filename="${fileName}"`,
+        "Content-Disposition": `attachment; filename="${fileName}"`,
         "Cache-Control":
           mode === "preview"
             ? "no-store, max-age=0"
             : "private, no-store, max-age=0",
         "X-Content-Type-Options": "nosniff",
-        "Accept-Ranges": "bytes",
+        "Cross-Origin-Resource-Policy": "same-origin",
       },
     });
   } catch (error) {

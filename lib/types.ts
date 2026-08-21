@@ -80,6 +80,7 @@ export interface BookStats {
   rating?: number | null;
   review_count?: number | null;
   sales_count?: number | null;
+  metrics_source?: "verified" | "promotional" | null;
 }
 
 export interface BookMetadata {

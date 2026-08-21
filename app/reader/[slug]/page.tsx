@@ -9,9 +9,9 @@ import BookReaderClient from "./BookReaderClient";
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  params: {
+  params: Promise<{
     slug: string;
-  };
+  }>;
 };
 
 function getLoginUrl(slug: string) {
@@ -23,7 +23,8 @@ function getCheckoutUrl(slug: string) {
 }
 
 export default async function ReaderPage({ params }: PageProps) {
-  const slug = decodeURIComponent(params.slug || "").trim();
+  const { slug: rawSlug } = await params;
+  const slug = decodeURIComponent(rawSlug || "").trim();
 
   if (!slug) {
     notFound();

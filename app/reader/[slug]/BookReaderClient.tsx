@@ -25,6 +25,7 @@ import {
   useState,
 } from "react";
 import type {
+  PDFDocumentLoadingTask,
   PDFDocumentProxy,
   PDFPageProxy,
 } from "pdfjs-dist/types/src/display/api";
@@ -88,6 +89,7 @@ type DragState = {
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
+const MAX_CANVAS_PIXELS = 16_777_216;
 const ZOOM_STEP = 0.25;
 const TOOLBAR_HEIGHT_ALLOWANCE = 24;
 const PROGRESS_SAVE_DELAY = 750;
@@ -236,8 +238,19 @@ function PdfPageCanvas({
 
         const cssViewport = page.getViewport({ scale, rotation });
         const outputScale = clamp(window.devicePixelRatio || 1, 1, 2);
-        const renderViewport = page.getViewport({
+        const rawRenderViewport = page.getViewport({
           scale: scale * outputScale,
+          rotation,
+        });
+        const pixelReduction = Math.min(
+          1,
+          Math.sqrt(
+            MAX_CANVAS_PIXELS /
+              Math.max(1, rawRenderViewport.width * rawRenderViewport.height)
+          )
+        );
+        const renderViewport = page.getViewport({
+          scale: scale * outputScale * pixelReduction,
           rotation,
         });
 
@@ -726,6 +739,7 @@ export default function BookReaderClient({
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
+            "X-BestSeller-Request": "1",
           },
           credentials: "same-origin",
           cache: "no-store",
@@ -840,7 +854,7 @@ export default function BookReaderClient({
 
   useEffect(() => {
     let cancelled = false;
-    let localPdf: PDFDocumentProxy | null = null;
+    let localLoadingTask: PDFDocumentLoadingTask | null = null;
 
     async function loadDocument() {
       try {
@@ -888,13 +902,15 @@ export default function BookReaderClient({
 
         const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
-        pdfjs.GlobalWorkerOptions.workerSrc =
-          `https://unpkg.com/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.min.mjs`;
+        pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
         const loadingTask = pdfjs.getDocument({
           url: pdfUrl,
           withCredentials: false,
+          enableXfa: false,
+          maxImageSize: 16_777_216,
         });
+        localLoadingTask = loadingTask;
 
         const [document, savedProgress] = await Promise.all([
           loadingTask.promise,
@@ -902,11 +918,10 @@ export default function BookReaderClient({
         ]);
 
         if (cancelled) {
-          await document.destroy();
+          await loadingTask.destroy();
           return;
         }
 
-        localPdf = document;
         const initialPage = clamp(
           savedProgress.snapshot?.currentPage ?? 1,
           1,
@@ -948,7 +963,7 @@ export default function BookReaderClient({
     return () => {
       cancelled = true;
       progressInitializedRef.current = false;
-      void localPdf?.destroy();
+      void localLoadingTask?.destroy();
     };
   }, [imagePages, loadSavedProgress, mode, pdfUrl]);
 
@@ -1037,6 +1052,7 @@ export default function BookReaderClient({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-BestSeller-Request": "1",
         },
         credentials: "same-origin",
         keepalive: true,

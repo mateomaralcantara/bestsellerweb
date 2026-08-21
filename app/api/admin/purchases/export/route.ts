@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 function safeCsvCell(value: unknown) {
   let text = value === null || value === undefined ? "" : String(value);
 
-  if (/^[=+\-@]/.test(text)) {
+  if (/^[\u0000-\u0020]*[=+\-@]/.test(text)) {
     text = `'${text}`;
   }
 

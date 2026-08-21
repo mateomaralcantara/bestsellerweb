@@ -1,14 +1,12 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useState } from "react";
 import { Send } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 
 const inputClassName =
   "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-slate-950 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-4 focus:ring-blue-100";
 
 export function AffiliateForm() {
-  const supabase = useMemo(() => createClient(), []);
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -17,29 +15,41 @@ export function AffiliateForm() {
     const form = event.currentTarget;
     const formData = new FormData(form);
 
-    if (!supabase) {
-      setStatus("Conecta Supabase para recibir postulaciones.");
-      return;
-    }
-
     setLoading(true);
+    setStatus(null);
 
-    const { error } = await supabase.from("affiliate_applications").insert({
-      full_name: formData.get("full_name"),
-      email: formData.get("email"),
-      channels: formData.get("channels"),
-      audience: formData.get("audience"),
-    });
+    try {
+      const response = await fetch("/api/applications/affiliate", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "X-BestSeller-Request": "1",
+        },
+        body: JSON.stringify({
+          fullName: String(formData.get("full_name") || ""),
+          email: String(formData.get("email") || ""),
+          channels: String(formData.get("channels") || ""),
+          audience: String(formData.get("audience") || ""),
+        }),
+      });
 
-    setLoading(false);
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
 
-    if (error) {
-      setStatus(error.message);
-      return;
+      if (!response.ok) {
+        setStatus(payload?.error || "No se pudo enviar la solicitud.");
+        return;
+      }
+
+      form.reset();
+      setStatus("Solicitud enviada correctamente. Revisaremos tu información.");
+    } catch {
+      setStatus("No se pudo conectar con el servidor. Inténtalo nuevamente.");
+    } finally {
+      setLoading(false);
     }
-
-    form.reset();
-    setStatus("Solicitud enviada correctamente. Revisaremos tu información.");
   }
 
   return (
@@ -54,6 +64,8 @@ export function AffiliateForm() {
             name="full_name"
             autoComplete="name"
             required
+            minLength={2}
+            maxLength={120}
             placeholder="Tu nombre"
             className={inputClassName}
           />
@@ -66,6 +78,7 @@ export function AffiliateForm() {
             name="email"
             autoComplete="email"
             required
+            maxLength={254}
             placeholder="nombre@correo.com"
             className={inputClassName}
           />
@@ -76,6 +89,9 @@ export function AffiliateForm() {
         <span>Canales donde promocionas contenido</span>
         <input
           name="channels"
+          required
+          minLength={3}
+          maxLength={600}
           placeholder="Instagram, TikTok, newsletter, comunidad..."
           className={inputClassName}
         />
@@ -86,6 +102,9 @@ export function AffiliateForm() {
         <textarea
           name="audience"
           rows={5}
+          required
+          minLength={10}
+          maxLength={2000}
           placeholder="Temas de interés, tamaño aproximado y tipo de comunidad..."
           className={inputClassName}
         />

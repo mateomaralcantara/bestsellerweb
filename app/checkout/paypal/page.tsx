@@ -12,13 +12,14 @@ import { getPayPalClientId } from "@/lib/paypal/config";
 import { userAlreadyOwnsBook } from "@/lib/paypal/purchases";
 import { PayPalCheckoutButton } from "@/components/payments/paypal-checkout-button";
 import { FuturePaymentMethods } from "@/components/payments/future-payment-methods";
+import { isUuid } from "@/lib/security/http";
 
 export const dynamic = "force-dynamic";
 
 type Props = {
-  searchParams?: {
-    bookId?: string;
-  };
+  searchParams?: Promise<{
+    bookId?: string | string[];
+  }>;
 };
 
 function money(amount: string, currency: string) {
@@ -36,8 +37,12 @@ function money(amount: string, currency: string) {
 export default async function PayPalCheckoutPage({
   searchParams,
 }: Props) {
-  const bookId = searchParams?.bookId?.trim() || "";
-  if (!bookId) notFound();
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const rawBookId = Array.isArray(resolvedSearchParams?.bookId)
+    ? resolvedSearchParams?.bookId[0]
+    : resolvedSearchParams?.bookId;
+  const bookId = rawBookId?.trim() || "";
+  if (!isUuid(bookId)) notFound();
 
   const supabase = await createClient();
   const {

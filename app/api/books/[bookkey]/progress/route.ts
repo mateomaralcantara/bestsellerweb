@@ -5,14 +5,21 @@ import {
 } from "@/lib/book-access";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import {
+  errorStatus,
+  publicErrorMessage,
+  readJsonBody,
+  requireTrustedMutation,
+} from "@/lib/security/http";
+import { consumeRateLimit } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     bookkey: string;
-  };
+  }>;
 };
 
 type ProgressPayload = {
@@ -121,7 +128,8 @@ async function getAuthorizedReader(bookkey: string) {
 
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
-    const bookkey = safeBookKey(params.bookkey);
+    const { bookkey: rawBookkey } = await params;
+    const bookkey = safeBookKey(rawBookkey);
 
     if (!bookkey) {
       return jsonResponse({ error: "Libro inválido." }, 400);
@@ -162,19 +170,16 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
 async function saveProgress(request: Request, { params }: RouteContext) {
   try {
-    const bookkey = safeBookKey(params.bookkey);
+    requireTrustedMutation(request);
+
+    const { bookkey: rawBookkey } = await params;
+    const bookkey = safeBookKey(rawBookkey);
 
     if (!bookkey) {
       return jsonResponse({ error: "Libro inválido." }, 400);
     }
 
-    let payload: ProgressPayload;
-
-    try {
-      payload = (await request.json()) as ProgressPayload;
-    } catch {
-      return jsonResponse({ error: "Datos de progreso inválidos." }, 400);
-    }
+    const payload = await readJsonBody<ProgressPayload>(request, 2_048);
 
     const requestedPage = toPositiveInteger(payload.currentPage);
     const totalPages = toPositiveInteger(payload.totalPages);
@@ -194,6 +199,23 @@ async function saveProgress(request: Request, { params }: RouteContext) {
 
     if (access.error || !access.user || !access.book) {
       return access.error;
+    }
+
+    const rateLimit = await consumeRateLimit(request, {
+      bucket: "reader:progress",
+      identity: access.user.id,
+      limit: 120,
+      windowSeconds: 60,
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Demasiadas actualizaciones de progreso." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+        }
+      );
     }
 
     const now = new Date().toISOString();
@@ -234,7 +256,10 @@ async function saveProgress(request: Request, { params }: RouteContext) {
     });
   } catch (error) {
     console.error("PUT /api/books/[bookkey]/progress error:", error);
-    return jsonResponse({ error: "Error guardando el progreso." }, 500);
+    return jsonResponse(
+      { error: publicErrorMessage(error, "Error guardando el progreso.") },
+      errorStatus(error)
+    );
   }
 }
 

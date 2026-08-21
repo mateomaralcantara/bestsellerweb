@@ -28,3 +28,9 @@ _repair_api_route_backups/
 reports/
 preview-test.epub
 *.bak
+*.backup-*
+*.tsbuildinfo
+public/pdf.worker.min.mjs
+reportes/
+.hardening-backups/
+software-structure-report.*

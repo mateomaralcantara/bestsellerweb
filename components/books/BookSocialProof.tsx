@@ -11,6 +11,7 @@ type BookSocialProofProps = {
   salesCount?: number | null;
   compact?: boolean;
   className?: string;
+  source?: "verified" | "promotional";
 };
 
 const STAR_INDEXES = [0, 1, 2, 3, 4] as const;
@@ -36,6 +37,7 @@ export function BookSocialProof({
   salesCount = DEFAULT_BOOK_DISPLAY_SALES_COUNT,
   compact = false,
   className = "",
+  source = "promotional",
 }: BookSocialProofProps) {
   const safeRating = normalizeDisplayRating(rating);
   const safeSalesCount = normalizeDisplaySalesCount(salesCount);
@@ -67,6 +69,15 @@ export function BookSocialProof({
       <span className="font-bold text-slate-600">
         {formattedSalesCount} lectores
       </span>
+
+      {source === "promotional" ? (
+        <span
+          className="basis-full text-[10px] font-semibold text-slate-500"
+          title="Métrica inicial de presentación; no equivale a reseñas o ventas verificadas."
+        >
+          Referencia promocional
+        </span>
+      ) : null}
     </div>
   );
 }
