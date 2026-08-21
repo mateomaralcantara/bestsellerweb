@@ -16,7 +16,7 @@ type EpubReaderClientProps = {
 
 type ReaderStatus = "idle" | "loading" | "ready" | "error";
 
-type ReaderEngine = "epubjs" | "manual";
+type ReaderEngine = "manual";
 
 type ManualChapter = {
   href: string;
@@ -31,14 +31,14 @@ type ManualBook = {
 };
 
 type LoadedReader = {
-  book: any | null;
-  rendition: any | null;
-  blobUrl: string | null;
   resourceUrls: string[];
 };
 
-const EPUBJS_TIMEOUT_MS = 12000;
 const TOTAL_LOAD_TIMEOUT_MS = 35000;
+const MAX_EPUB_COMPRESSED_BYTES = 100 * 1024 * 1024;
+const MAX_EPUB_UNCOMPRESSED_BYTES = 512 * 1024 * 1024;
+const MAX_EPUB_ENTRIES = 5_000;
+const MAX_EPUB_TEXT_BYTES = 5 * 1024 * 1024;
 
 function normalizeEpubUrl(rawUrl: string, mode: "preview" | "full") {
   const cleanUrl = String(rawUrl || "").trim();
@@ -112,22 +112,6 @@ function getJsonErrorMessage(text: string) {
   } catch {
     return "";
   }
-}
-
-function timeoutPromise<T>(ms: number, message: string): Promise<T> {
-  return new Promise((_, reject) => {
-    window.setTimeout(() => {
-      reject(new Error(message));
-    }, ms);
-  });
-}
-
-async function withTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-  message: string
-): Promise<T> {
-  return Promise.race([promise, timeoutPromise<T>(ms, message)]);
 }
 
 async function fetchEpubArrayBuffer(url: string) {
@@ -307,7 +291,17 @@ async function readZipText(zip: any, filePath: string) {
     throw new Error(`No se encontró dentro del EPUB: ${cleanPath}`);
   }
 
-  return await file.async("text");
+  const uncompressedSize = Number(file?._data?.uncompressedSize || 0);
+  if (uncompressedSize > MAX_EPUB_TEXT_BYTES) {
+    throw new Error(`El archivo interno es demasiado grande: ${cleanPath}`);
+  }
+
+  const text = await file.async("text");
+  if (new TextEncoder().encode(text).byteLength > MAX_EPUB_TEXT_BYTES) {
+    throw new Error(`El archivo interno excede el límite: ${cleanPath}`);
+  }
+
+  return text;
 }
 
 async function createResourceUrlMap(zip: any) {
@@ -368,8 +362,6 @@ async function createResourceUrlMap(zip: any) {
         if (
           !cleanUrl ||
           cleanUrl.startsWith("data:") ||
-          cleanUrl.startsWith("http://") ||
-          cleanUrl.startsWith("https://") ||
           cleanUrl.startsWith("#")
         ) {
           return `url(${quote}${cleanUrl}${quote})`;
@@ -411,14 +403,32 @@ function rewriteChapterHtml(params: {
   const htmlDocument = parser.parseFromString(params.rawHtml, "text/html");
   const chapterBasePath = dirname(params.chapterPath);
 
+  htmlDocument
+    .querySelectorAll(
+      "script, iframe, object, embed, form, input, button, textarea, select, base, meta, link"
+    )
+    .forEach((element) => element.remove());
+
+  htmlDocument.querySelectorAll("*").forEach((element) => {
+    for (const attribute of Array.from(element.attributes)) {
+      const name = attribute.name.toLowerCase();
+      if (
+        name.startsWith("on") ||
+        name === "srcset" ||
+        name === "ping" ||
+        name === "formaction"
+      ) {
+        element.removeAttribute(attribute.name);
+      }
+    }
+  });
+
   const rewriteUrl = (rawUrl: string | null) => {
     const cleanUrl = String(rawUrl || "").trim();
 
     if (
       !cleanUrl ||
-      cleanUrl.startsWith("data:") ||
-      cleanUrl.startsWith("http://") ||
-      cleanUrl.startsWith("https://") ||
+      cleanUrl.startsWith("data:image/") ||
       cleanUrl.startsWith("#")
     ) {
       return cleanUrl;
@@ -473,14 +483,12 @@ function rewriteChapterHtml(params: {
   });
 
   const bodyContent = htmlDocument.body?.innerHTML || params.rawHtml;
-  const headContent = htmlDocument.head?.innerHTML || "";
-
   return `<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-${headContent}
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data:; style-src 'unsafe-inline' blob:; font-src blob: data:;" />
 <style>
   html,
   body {
@@ -531,9 +539,27 @@ ${bodyContent}
 }
 
 async function parseManualEpub(arrayBuffer: ArrayBuffer): Promise<ManualBook> {
+  if (arrayBuffer.byteLength > MAX_EPUB_COMPRESSED_BYTES) {
+    throw new Error("El EPUB comprimido supera el límite permitido.");
+  }
+
   const JSZipModule = await import("jszip");
   const JSZip = JSZipModule.default;
   const zip = await JSZip.loadAsync(arrayBuffer);
+  const entries = Object.values(zip.files) as any[];
+
+  if (entries.length > MAX_EPUB_ENTRIES) {
+    throw new Error("El EPUB contiene demasiados archivos internos.");
+  }
+
+  const uncompressedBytes = entries.reduce(
+    (total, entry) => total + Number(entry?._data?.uncompressedSize || 0),
+    0
+  );
+
+  if (uncompressedBytes > MAX_EPUB_UNCOMPRESSED_BYTES) {
+    throw new Error("El EPUB expandido supera el límite de seguridad.");
+  }
 
   const containerText = await readZipText(zip, "META-INF/container.xml");
   const containerXml = new DOMParser().parseFromString(
@@ -677,11 +703,10 @@ export default function EpubReaderClient({
   epubUrl,
   mode = "preview",
 }: EpubReaderClientProps) {
-  const viewerRef = useRef<HTMLDivElement | null>(null);
   const loadedReaderRef = useRef<LoadedReader | null>(null);
 
   const [status, setStatus] = useState<ReaderStatus>("idle");
-  const [engine, setEngine] = useState<ReaderEngine>("epubjs");
+  const [engine, setEngine] = useState<ReaderEngine>("manual");
   const [errorMessage, setErrorMessage] = useState("");
   const [locationLabel, setLocationLabel] = useState("Inicio");
   const [manualBook, setManualBook] = useState<ManualBook | null>(null);
@@ -697,26 +722,6 @@ export default function EpubReaderClient({
     loadedReaderRef.current = null;
 
     try {
-      currentReader?.rendition?.destroy?.();
-    } catch {
-      // No bloquea desmontaje.
-    }
-
-    try {
-      currentReader?.book?.destroy?.();
-    } catch {
-      // No bloquea desmontaje.
-    }
-
-    try {
-      if (currentReader?.blobUrl) {
-        URL.revokeObjectURL(currentReader.blobUrl);
-      }
-    } catch {
-      // No bloquea desmontaje.
-    }
-
-    try {
       for (const url of currentReader?.resourceUrls || []) {
         URL.revokeObjectURL(url);
       }
@@ -724,38 +729,21 @@ export default function EpubReaderClient({
       // No bloquea desmontaje.
     }
 
-    if (viewerRef.current) {
-      viewerRef.current.innerHTML = "";
-    }
   }, []);
 
   const goNext = useCallback(() => {
-    if (engine === "manual") {
-      setManualIndex((current) => {
-        if (!manualBook) {
-          return current;
-        }
+    setManualIndex((current) => {
+      if (!manualBook) {
+        return current;
+      }
 
-        return Math.min(current + 1, manualBook.chapters.length - 1);
-      });
-
-      return;
-    }
-
-    loadedReaderRef.current?.rendition?.next?.();
-  }, [engine, manualBook]);
+      return Math.min(current + 1, manualBook.chapters.length - 1);
+    });
+  }, [manualBook]);
 
   const goPrev = useCallback(() => {
-    if (engine === "manual") {
-      setManualIndex((current) => {
-        return Math.max(current - 1, 0);
-      });
-
-      return;
-    }
-
-    loadedReaderRef.current?.rendition?.prev?.();
-  }, [engine]);
+    setManualIndex((current) => Math.max(current - 1, 0));
+  }, []);
 
   useEffect(() => {
     if (engine !== "manual" || !manualBook) {
@@ -770,61 +758,6 @@ export default function EpubReaderClient({
   useEffect(() => {
     let cancelled = false;
     let totalTimeoutId: ReturnType<typeof window.setTimeout> | null = null;
-
-    async function tryEpubJs(arrayBuffer: ArrayBuffer) {
-      if (!viewerRef.current) {
-        throw new Error("No se pudo preparar el contenedor del lector.");
-      }
-
-      const epubModule = await import("epubjs");
-      const createBook = (epubModule as any).default || epubModule;
-
-      const book = createBook(arrayBuffer, {
-        openAs: "epub",
-      });
-
-      const rendition = book.renderTo(viewerRef.current, {
-        width: "100%",
-        height: "100%",
-        flow: "paginated",
-        spread: "none",
-        manager: "default",
-      });
-
-      loadedReaderRef.current = {
-        book,
-        rendition,
-        blobUrl: null,
-        resourceUrls: [],
-      };
-
-      rendition.on("relocated", (location: any) => {
-        const current =
-          location?.start?.displayed?.page ||
-          location?.start?.index ||
-          "";
-
-        const total = location?.start?.displayed?.total || "";
-
-        if (current && total) {
-          setLocationLabel(`Página ${current} de ${total}`);
-          return;
-        }
-
-        if (current) {
-          setLocationLabel(`Ubicación ${current}`);
-          return;
-        }
-
-        setLocationLabel("Leyendo");
-      });
-
-      await withTimeout(
-        rendition.display(),
-        EPUBJS_TIMEOUT_MS,
-        "epubjs tardó demasiado; se usará lector alternativo."
-      );
-    }
 
     async function loadReader() {
       destroyReader();
@@ -844,7 +777,7 @@ export default function EpubReaderClient({
       }
 
       setStatus("loading");
-      setEngine("epubjs");
+      setEngine("manual");
       setManualBook(null);
       setManualIndex(0);
       setErrorMessage("");
@@ -866,35 +799,7 @@ export default function EpubReaderClient({
           return;
         }
 
-        setLocationLabel("Preparando lector principal...");
-
-        try {
-          await tryEpubJs(arrayBuffer);
-
-          if (cancelled) {
-            return;
-          }
-
-          if (totalTimeoutId) {
-            window.clearTimeout(totalTimeoutId);
-            totalTimeoutId = null;
-          }
-
-          setEngine("epubjs");
-          setStatus("ready");
-          setLocationLabel("Lectura lista");
-          return;
-        } catch (epubJsError) {
-          console.warn("epubjs falló, usando fallback manual:", epubJsError);
-
-          destroyReader();
-
-          if (viewerRef.current) {
-            viewerRef.current.innerHTML = "";
-          }
-
-          setLocationLabel("Usando lector alternativo...");
-        }
+        setLocationLabel("Preparando lector seguro...");
 
         const parsedManualBook = await parseManualEpub(arrayBuffer);
 
@@ -907,9 +812,6 @@ export default function EpubReaderClient({
         }
 
         loadedReaderRef.current = {
-          book: null,
-          rendition: null,
-          blobUrl: null,
           resourceUrls: parsedManualBook.resourceUrls,
         };
 
@@ -1012,7 +914,7 @@ export default function EpubReaderClient({
           <p className="mt-1 text-xs text-slate-500">
             {locationLabel}
             {engine === "manual" && status === "ready"
-              ? " · lector alternativo"
+              ? " · lector seguro"
               : ""}
           </p>
         </div>
@@ -1059,7 +961,7 @@ export default function EpubReaderClient({
           </div>
         )}
 
-        {engine === "manual" && currentManualChapter ? (
+        {currentManualChapter ? (
           <iframe
             key={currentManualChapter.href}
             title={currentManualChapter.label}
@@ -1067,12 +969,7 @@ export default function EpubReaderClient({
             sandbox=""
             className="h-[72vh] w-full border-0 bg-white"
           />
-        ) : (
-          <div
-            ref={viewerRef}
-            className="h-[72vh] w-full overflow-hidden bg-white"
-          />
-        )}
+        ) : <div className="h-[72vh] w-full overflow-hidden bg-white" />}
       </div>
 
       <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">

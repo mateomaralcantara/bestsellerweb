@@ -11,6 +11,7 @@ export type ExtractedBookPreview = {
 
 type PdfJsModule = {
   getDocument: (options: Record<string, unknown>) => {
+    destroy: () => Promise<void>;
     promise: Promise<{
       numPages: number;
       getPage: (pageNumber: number) => Promise<{
@@ -19,7 +20,6 @@ type PdfJsModule = {
         }>;
         cleanup: () => void;
       }>;
-      destroy: () => Promise<void> | void;
     }>;
   };
 };
@@ -59,7 +59,9 @@ async function detectFileKind(
 }
 
 async function loadPdfJs(): Promise<PdfJsModule> {
-  return (await import("pdfjs-dist/legacy/build/pdf.mjs")) as PdfJsModule;
+  return (await import(
+    "pdfjs-dist/legacy/build/pdf.mjs"
+  )) as unknown as PdfJsModule;
 }
 
 function normalizeSearchText(value: string): string {
@@ -179,7 +181,8 @@ async function extractPdfPreview(file: File): Promise<ExtractedBookPreview> {
     data: bytes,
     useSystemFonts: true,
     disableFontFace: true,
-    isEvalSupported: false,
+    enableXfa: false,
+    maxImageSize: 16_777_216,
   });
 
   const pdfDoc = await loadingTask.promise;
@@ -209,7 +212,7 @@ async function extractPdfPreview(file: File): Promise<ExtractedBookPreview> {
     }
   } finally {
     try {
-      await pdfDoc.destroy();
+      await loadingTask.destroy();
     } catch {
       // noop
     }

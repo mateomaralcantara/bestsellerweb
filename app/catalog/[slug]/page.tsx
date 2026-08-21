@@ -25,14 +25,15 @@ import { CatalogPurchaseActions } from "@/components/payments/catalog-purchase-a
 import { BookSocialProof } from "@/components/books/BookSocialProof";
 import { BookComments } from "@/components/books/BookComments";
 import { getBookSocialProof } from "@/lib/book-social-proof";
+import { normalizeExternalHttpsUrl } from "@/lib/security/urls";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type PageProps = {
-  params: {
+  params: Promise<{
     slug: string;
-  };
+  }>;
 };
 
 type BookRecord = {
@@ -111,13 +112,11 @@ type PreviewPageRecord = {
   page_index: number;
   source_page_number: number | null;
   kind: string | null;
-  image_url: string | null;
   image_path: string | null;
   width: number | null;
   height: number | null;
 };
 
-const PREVIEW_BUCKET = "book-previews";
 const PREVIEW_PAGE_LIMIT = 25;
 
 const BOOK_SELECT = `
@@ -393,7 +392,7 @@ async function getPreviewPages(bookId: string): Promise<LookInsidePreviewPage[]>
   const { data, error } = await supabaseAdmin
     .from("book_preview_pages")
     .select(
-      "id, page_index, source_page_number, kind, image_url, image_path, width, height"
+      "id, page_index, source_page_number, kind, image_path, width, height"
     )
     .eq("book_id", bookId)
     .order("page_index", { ascending: true })
@@ -407,13 +406,12 @@ async function getPreviewPages(bookId: string): Promise<LookInsidePreviewPage[]>
   return ((data ?? []) as PreviewPageRecord[])
     .slice(0, PREVIEW_PAGE_LIMIT)
     .map((page): LookInsidePreviewPage | null => {
-      const imageUrl =
-        cleanText(page.image_url) ||
-        (page.image_path
-          ? getStoragePublicUrl(PREVIEW_BUCKET, page.image_path)
-          : null);
-
-      if (!imageUrl) {
+      if (
+        !page.image_path ||
+        !Number.isInteger(page.page_index) ||
+        page.page_index < 0 ||
+        page.page_index >= PREVIEW_PAGE_LIMIT
+      ) {
         return null;
       }
 
@@ -421,7 +419,7 @@ async function getPreviewPages(bookId: string): Promise<LookInsidePreviewPage[]>
         pageIndex: page.page_index,
         sourcePageNumber: page.source_page_number,
         kind: normalizePreviewKind(page.kind),
-        imageUrl,
+        imageUrl: `/api/books/${encodeURIComponent(bookId)}/preview/${page.page_index}`,
         imageWidth: page.width,
         imageHeight: page.height,
       };
@@ -484,7 +482,15 @@ function TextSection({
 }
 
 export default async function BookPublicPage({ params }: PageProps) {
-  const slug = decodeURIComponent(params.slug || "").trim();
+  const { slug: rawSlug } = await params;
+  let slug = "";
+
+  try {
+    const candidate = decodeURIComponent(rawSlug || "").trim();
+    slug = /^[a-z0-9-]{1,160}$/i.test(candidate) ? candidate : "";
+  } catch {
+    slug = "";
+  }
 
   if (!slug) {
     notFound();
@@ -511,6 +517,7 @@ export default async function BookPublicPage({ params }: PageProps) {
   const keywords = getKeywordList(book);
   const authorName = getAuthorName(author);
   const socialProof = getBookSocialProof(book.metadata);
+  const sampleUrl = normalizeExternalHttpsUrl(book.sample_url);
 
   const localPrice = edition?.price ?? null;
   const localCurrency = edition?.currency ?? null;
@@ -601,6 +608,7 @@ export default async function BookPublicPage({ params }: PageProps) {
               <BookSocialProof
                 rating={socialProof.rating}
                 salesCount={socialProof.salesCount}
+                source={socialProof.source}
                 className="mt-4 rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-2.5"
               />
 
@@ -941,14 +949,14 @@ export default async function BookPublicPage({ params }: PageProps) {
               bookSlug={book.slug}
               bookTitle={book.title}
             />
-            {book.sample_url ? (
+            {sampleUrl ? (
               <section className="commercial-card rounded-[28px] p-6">
                 <h2 className="text-xl font-black text-[#07111f]">
                   Muestra externa
                 </h2>
 
                 <Link
-                  href={book.sample_url}
+                  href={sampleUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="mt-4 inline-flex rounded-2xl border border-slate-300 px-5 py-3 font-bold text-slate-700 transition hover:border-blue-300 hover:text-[#155eef]"

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getBookCheckoutItem } from "@/lib/paypal/book-checkout";
+import { consumeRateLimit } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,13 +11,30 @@ export async function GET(request: NextRequest) {
     const slug =
       request.nextUrl.searchParams.get("slug")?.trim() || "";
 
-    if (!slug) {
+    if (!slug || slug.length > 160 || !/^[a-z0-9-]+$/i.test(slug)) {
       return NextResponse.json(
         {
           ok: false,
           error: "Falta el slug del libro.",
         },
         { status: 400 }
+      );
+    }
+
+    const rateLimit = await consumeRateLimit(request, {
+      bucket: "paypal:book-lookup",
+      identity: slug,
+      limit: 120,
+      windowSeconds: 60,
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { ok: false, error: "Demasiadas consultas." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+        }
       );
     }
 
@@ -54,13 +72,11 @@ export async function GET(request: NextRequest) {
     try {
       checkoutItem = await getBookCheckoutItem(String(data.id));
     } catch (error) {
+      console.error("PayPal pricing lookup:", error);
       return NextResponse.json(
         {
           ok: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "El precio PayPal no está listo.",
+          error: "El precio PayPal no está listo.",
         },
         { status: 422 }
       );

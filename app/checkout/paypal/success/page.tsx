@@ -3,13 +3,14 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { RemovePurchasedCartItem } from "@/components/payments/remove-purchased-cart-item";
+import { isUuid } from "@/lib/security/http";
 
 export const dynamic = "force-dynamic";
 
 type Props = {
-  searchParams?: {
-    bookId?: string;
-  };
+  searchParams?: Promise<{
+    bookId?: string | string[];
+  }>;
 };
 
 type Purchase = {
@@ -28,7 +29,11 @@ function getBook(purchase: Purchase) {
 }
 
 export default async function SuccessPage({ searchParams }: Props) {
-  const bookId = searchParams?.bookId?.trim() || "";
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const rawBookId = Array.isArray(resolvedSearchParams?.bookId)
+    ? resolvedSearchParams?.bookId[0]
+    : resolvedSearchParams?.bookId;
+  const bookId = rawBookId?.trim() || "";
 
   const supabase = await createClient();
   const {
@@ -36,7 +41,7 @@ export default async function SuccessPage({ searchParams }: Props) {
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/auth");
-  if (!bookId) redirect("/catalog");
+  if (!isUuid(bookId)) redirect("/catalog");
 
   const { data } = await supabaseAdmin
     .from("book_purchases")
@@ -53,6 +58,7 @@ export default async function SuccessPage({ searchParams }: Props) {
     .eq("user_id", user.id)
     .eq("book_id", bookId)
     .in("status", ["paid", "completed", "approved", "succeeded"])
+    .is("revoked_at", null)
     .limit(1)
     .maybeSingle();
 

@@ -74,10 +74,18 @@ export function PayPalCheckoutButton({
       }
 
       if (!script) {
+        const nonce =
+          document.querySelector<HTMLScriptElement>("script[nonce]")?.nonce ||
+          "";
+
         script = document.createElement("script");
         script.id = scriptId;
         script.async = true;
         script.dataset.currency = currency;
+        if (nonce) {
+          script.nonce = nonce;
+          script.dataset.cspNonce = nonce;
+        }
         script.src =
           "https://www.paypal.com/sdk/js" +
           `?client-id=${encodeURIComponent(clientId)}` +
@@ -128,7 +136,11 @@ export function PayPalCheckoutButton({
               "/api/payments/paypal/create-order",
               {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-BestSeller-Request": "1",
+                },
+                credentials: "same-origin",
                 body: JSON.stringify({ bookId }),
               }
             );
@@ -163,7 +175,11 @@ export function PayPalCheckoutButton({
               "/api/payments/paypal/capture-order",
               {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-BestSeller-Request": "1",
+                },
+                credentials: "same-origin",
                 body: JSON.stringify({ orderId: orderID }),
               }
             );

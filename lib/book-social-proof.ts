@@ -4,6 +4,7 @@ export const DEFAULT_BOOK_DISPLAY_SALES_COUNT = 2000;
 export type BookSocialProof = {
   rating: number;
   salesCount: number;
+  source: "verified" | "promotional";
 };
 
 function toFiniteNumber(value: unknown): number | null {
@@ -57,12 +58,16 @@ export function getBookSocialProof(
     salesCount: normalizeDisplaySalesCount(
       safeMetadata.display_sales_count ?? safeMetadata.sales_count
     ),
+    source:
+      safeMetadata.display_metrics_source === "verified"
+        ? "verified"
+        : "promotional",
   };
 }
 
 export function mergeBookSocialProofMetadata(
   metadata: Record<string, unknown> | null | undefined,
-  socialProof: BookSocialProof
+  socialProof: Pick<BookSocialProof, "rating" | "salesCount">
 ): Record<string, unknown> {
   return {
     ...(metadata ?? {}),

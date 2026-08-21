@@ -4,6 +4,14 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getBookCheckoutItem } from "@/lib/paypal/book-checkout";
 import { createPayPalOrder, PayPalApiError } from "@/lib/paypal/client";
 import { userAlreadyOwnsBook } from "@/lib/paypal/purchases";
+import {
+  errorStatus,
+  isUuid,
+  publicErrorMessage,
+  readJsonBody,
+  requireTrustedMutation,
+} from "@/lib/security/http";
+import { consumeRateLimit } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +51,8 @@ function getLocalOrderError(error: unknown) {
 
 export async function POST(request: Request) {
   try {
+    requireTrustedMutation(request);
+
     const supabase = await createClient();
     const {
       data: { user },
@@ -53,13 +63,28 @@ export async function POST(request: Request) {
       return fail("Debes iniciar sesión para comprar.", 401);
     }
 
-    const body = (await request.json().catch(() => null)) as
-      | { bookId?: unknown }
-      | null;
+    const rateLimit = await consumeRateLimit(request, {
+      bucket: "paypal:create-order",
+      identity: user.id,
+      limit: 10,
+      windowSeconds: 600,
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { ok: false, error: "Demasiados intentos. Espera antes de reintentar." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+        }
+      );
+    }
+
+    const body = await readJsonBody<{ bookId?: unknown }>(request, 1_024);
     const bookId =
       typeof body?.bookId === "string" ? body.bookId.trim() : "";
 
-    if (!bookId) return fail("Falta el bookId.", 400);
+    if (!isUuid(bookId)) return fail("El bookId no es válido.", 400);
 
     if (await userAlreadyOwnsBook({ userId: user.id, bookId })) {
       return NextResponse.json(
@@ -100,6 +125,21 @@ export async function POST(request: Request) {
 
       if (!paypalOrder.id) {
         throw new Error("PayPal no devolvió el identificador de la orden.");
+      }
+
+      const purchaseUnit = paypalOrder.purchase_units?.[0];
+      const returnedAmount = Number(purchaseUnit?.amount?.value);
+      const validRepresentation =
+        paypalOrder.status === "CREATED" &&
+        purchaseUnit?.reference_id === localOrder.id &&
+        purchaseUnit?.custom_id === localOrder.id &&
+        purchaseUnit?.invoice_id === localOrder.id &&
+        purchaseUnit?.amount?.currency_code === book.currency &&
+        Number.isFinite(returnedAmount) &&
+        Math.abs(returnedAmount - Number(book.amount)) < 0.001;
+
+      if (!validRepresentation) {
+        throw new Error("PayPal devolvió una orden con datos inconsistentes.");
       }
 
       const { error: updateError } = await supabaseAdmin
@@ -149,8 +189,8 @@ export async function POST(request: Request) {
     }
 
     return fail(
-      error instanceof Error ? error.message : "Error creando la orden.",
-      500
+      publicErrorMessage(error, "No se pudo crear la orden."),
+      errorStatus(error)
     );
   }
 }

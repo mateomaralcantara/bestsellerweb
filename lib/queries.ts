@@ -213,6 +213,7 @@ function normalizeBook(row: BookRow, edition: EditionRow | null = null): Book {
     rating: socialProof.rating,
     review_count: 0,
     sales_count: socialProof.salesCount,
+    metrics_source: socialProof.source,
     formats: format ? [format] : [],
     categories: [],
     badge: null,

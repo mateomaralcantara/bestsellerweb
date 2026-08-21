@@ -11,6 +11,19 @@ import {
   DEFAULT_BOOK_DISPLAY_SALES_COUNT,
   mergeBookSocialProofMetadata,
 } from "@/lib/book-social-proof";
+import {
+  assertSafeCoverFile,
+  assertSafeEpubFile,
+  assertSafePdfFile,
+} from "@/lib/security/files";
+import {
+  errorStatus,
+  requireMultipartFormData,
+  requireTrustedMutation,
+} from "@/lib/security/http";
+import { consumeRateLimit } from "@/lib/security/rate-limit";
+import { normalizeExternalHttpsUrl } from "@/lib/security/urls";
+import { userIsAdmin } from "@/lib/admin-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +40,7 @@ const MAX_EPUB_SIZE_MB = 100;
 const MAX_COVER_SIZE_BYTES = MAX_COVER_SIZE_MB * 1024 * 1024;
 const MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
 const MAX_EPUB_SIZE_BYTES = MAX_EPUB_SIZE_MB * 1024 * 1024;
+const MAX_MULTIPART_SIZE_BYTES = 365 * 1024 * 1024;
 
 const ALLOWED_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
 const ALLOWED_PDF_EXTENSIONS = new Set(["pdf"]);
@@ -44,9 +58,9 @@ const ALLOWED_BOOK_STATUSES = new Set([
 ]);
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     bookkey: string;
-  };
+  }>;
 };
 
 type OwnedBook = {
@@ -120,8 +134,21 @@ function getErrorMessage(error: unknown) {
   return "Error interno actualizando libro.";
 }
 
+function resolveUpdateErrorStatus(message: string) {
+  return /obligatori|v[aá]lid|debe|superar|seleccion|entre|moneda|formato|identificador|\bID\b/i.test(
+    message
+  )
+    ? 400
+    : 500;
+}
+
 function normalizeBookKey(value: string | undefined) {
-  return decodeURIComponent(value ?? "").trim();
+  try {
+    const bookKey = decodeURIComponent(value ?? "").trim();
+    return bookKey.length <= 160 ? bookKey : "";
+  } catch {
+    return "";
+  }
 }
 
 function isUuid(value: string) {
@@ -461,8 +488,9 @@ async function getOwnedBook(bookKey: string) {
   }
 
   const ownedBook = book as OwnedBook;
+  const isAdmin = await userIsAdmin(user.id);
 
-  if (ownedBook.owner_user_id !== user.id) {
+  if (ownedBook.owner_user_id !== user.id && !isAdmin) {
     return {
       user,
       book: null,
@@ -473,6 +501,7 @@ async function getOwnedBook(bookKey: string) {
   return {
     user,
     book: ownedBook,
+    isAdmin,
     response: null,
   };
 }
@@ -724,6 +753,7 @@ async function uploadCover(params: {
   cover: File;
 }) {
   validateCoverFile(params.cover);
+  await assertSafeCoverFile(params.cover);
 
   const coverExt = getFileExtension(params.cover, "jpg");
   const coverPath = `covers/${params.book.slug}-${randomUUID()}.${coverExt}`;
@@ -782,6 +812,7 @@ async function uploadManuscriptPdf(params: {
   pdf: File;
 }) {
   validatePdfFile(params.pdf);
+  await assertSafePdfFile(params.pdf);
 
   const pdfPath = `manuscripts/${params.book.slug}-${randomUUID()}.pdf`;
 
@@ -842,6 +873,7 @@ async function uploadOptionalEpub(params: {
   epub: File;
 }) {
   validateEpubFile(params.epub);
+  await assertSafeEpubFile(params.epub);
 
   const epubPath = `epubs/${params.book.slug}-${randomUUID()}.epub`;
 
@@ -883,7 +915,11 @@ async function uploadOptionalEpub(params: {
 
 export async function PATCH(request: Request, { params }: RouteContext) {
   try {
-    const bookKey = normalizeBookKey(params.bookkey);
+    requireTrustedMutation(request);
+    requireMultipartFormData(request, MAX_MULTIPART_SIZE_BYTES);
+
+    const { bookkey: rawBookkey } = await params;
+    const bookKey = normalizeBookKey(rawBookkey);
 
     if (!bookKey) {
       return jsonError("ID inválido.", 400);
@@ -897,9 +933,34 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     const user = access.user!;
     const book = access.book!;
+    const isAdmin = Boolean(access.isAdmin);
+
+    const rateLimit = await consumeRateLimit(request, {
+      bucket: "books:update",
+      identity: user.id,
+      limit: 20,
+      windowSeconds: 3_600,
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Has realizado demasiados cambios en libros." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+        }
+      );
+    }
+
     const formData = await request.formData();
 
-    const { title, status, keywords } = validateMainFields(formData);
+    const { title, status: requestedStatus, keywords } =
+      validateMainFields(formData);
+    const status = isAdmin
+      ? requestedStatus
+      : requestedStatus === "draft"
+        ? "draft"
+        : "under_review";
 
     const price = parseRequiredPrice(formData);
     const currency = readText(formData, "currency") || "DOP";
@@ -909,6 +970,12 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     ).toUpperCase();
     const displayRating = parseDisplayRating(formData);
     const displaySalesCount = parseDisplaySalesCount(formData);
+    const rawSampleUrl = nullableText(formData, "sample_url");
+    const sampleUrl = normalizeExternalHttpsUrl(rawSampleUrl);
+
+    if (rawSampleUrl && !sampleUrl) {
+      return jsonError("La URL de muestra debe ser una dirección HTTPS válida.", 400);
+    }
 
     if (paypalPrice !== null && paypalPrice <= 0) {
       return jsonError("El precio PayPal debe ser mayor que cero.", 400);
@@ -932,7 +999,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         nullableText(formData, "description_long"),
       introduction: nullableText(formData, "introduction"),
       chapter_one_excerpt: nullableText(formData, "chapter_one_excerpt"),
-      sample_url: nullableText(formData, "sample_url"),
+      sample_url: sampleUrl,
 
       primary_niche: nullableText(formData, "primary_niche"),
       primary_category: nullableText(formData, "primary_category"),
@@ -957,8 +1024,10 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       updated_at: now,
     };
 
-    assignBooleanIfPresent(bookUpdate, "featured", formData, "is_featured");
-    assignBooleanIfPresent(bookUpdate, "is_featured", formData, "is_featured");
+    if (isAdmin) {
+      assignBooleanIfPresent(bookUpdate, "featured", formData, "is_featured");
+      assignBooleanIfPresent(bookUpdate, "is_featured", formData, "is_featured");
+    }
 
     await updateWithColumnFallback({
       table: "books",
@@ -1097,7 +1166,13 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     });
   } catch (error) {
     console.error("PATCH /api/books/[bookkey] error:", error);
+    const message = getErrorMessage(error);
+    const status = errorStatus(error, resolveUpdateErrorStatus(message));
+    const responseMessage =
+      process.env.NODE_ENV === "production" && status >= 500
+        ? "No se pudo actualizar el libro. Inténtalo nuevamente."
+        : message;
 
-    return jsonError(getErrorMessage(error), 500);
+    return jsonError(responseMessage, status);
   }
 }

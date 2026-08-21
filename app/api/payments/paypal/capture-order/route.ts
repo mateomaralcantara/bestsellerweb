@@ -3,10 +3,19 @@ import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   capturePayPalOrder,
+  getPayPalOrder,
   PayPalApiError,
   type PayPalOrder,
 } from "@/lib/paypal/client";
 import { grantBookPurchase } from "@/lib/paypal/purchases";
+import {
+  errorStatus,
+  isPayPalOrderId,
+  publicErrorMessage,
+  readJsonBody,
+  requireTrustedMutation,
+} from "@/lib/security/http";
+import { consumeRateLimit } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,8 +65,27 @@ function amountMatches(expected: number, received: string | null) {
   return Number.isFinite(value) && Math.abs(expected - value) < 0.001;
 }
 
+function referencesMatch(order: PayPalOrder, localOrderId: string) {
+  const unit = order.purchase_units?.[0];
+  return (
+    unit?.reference_id === localOrderId &&
+    unit?.custom_id === localOrderId &&
+    unit?.invoice_id === localOrderId
+  );
+}
+
+function isAlreadyCapturedError(error: PayPalApiError) {
+  try {
+    return JSON.stringify(error.details).includes("ORDER_ALREADY_CAPTURED");
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(request: Request) {
   try {
+    requireTrustedMutation(request);
+
     const supabase = await createClient();
     const {
       data: { user },
@@ -68,13 +96,30 @@ export async function POST(request: Request) {
       return fail("Debes iniciar sesión para confirmar el pago.", 401);
     }
 
-    const body = (await request.json().catch(() => null)) as
-      | { orderId?: unknown }
-      | null;
+    const rateLimit = await consumeRateLimit(request, {
+      bucket: "paypal:capture-order",
+      identity: user.id,
+      limit: 15,
+      windowSeconds: 600,
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { ok: false, error: "Demasiados intentos. Espera antes de reintentar." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+        }
+      );
+    }
+
+    const body = await readJsonBody<{ orderId?: unknown }>(request, 1_024);
     const orderId =
       typeof body?.orderId === "string" ? body.orderId.trim() : "";
 
-    if (!orderId) return fail("Falta el orderId.", 400);
+    if (!isPayPalOrderId(orderId)) {
+      return fail("El orderId no es válido.", 400);
+    }
 
     const { data, error } = await supabaseAdmin
       .from("paypal_orders")
@@ -113,10 +158,53 @@ export async function POST(request: Request) {
         )}`,
       });
     }
-    const paypalOrder = await capturePayPalOrder(
-      localOrder.paypal_order_id,
-      localOrder.id
-    );
+
+    const staleBefore = new Date(Date.now() - 120_000).toISOString();
+    const { data: captureClaim, error: captureClaimError } = await supabaseAdmin
+      .from("paypal_orders")
+      .update({
+        status: "capturing",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", localOrder.id)
+      .neq("status", "completed")
+      .or(`status.neq.capturing,updated_at.lt.${staleBefore}`)
+      .select("id")
+      .maybeSingle();
+
+    if (captureClaimError) {
+      return fail("No se pudo reservar la captura del pago.", 500);
+    }
+
+    if (!captureClaim) {
+      return fail("Este pago ya se está confirmando. Espera unos segundos.", 409);
+    }
+
+    let paypalOrder: PayPalOrder;
+
+    try {
+      paypalOrder = await capturePayPalOrder(
+        localOrder.paypal_order_id,
+        localOrder.id
+      );
+    } catch (error) {
+      if (error instanceof PayPalApiError && isAlreadyCapturedError(error)) {
+        paypalOrder = await getPayPalOrder(localOrder.paypal_order_id);
+      } else {
+        await supabaseAdmin
+          .from("paypal_orders")
+          .update({
+            status: "capture_failed",
+            failure_reason:
+              error instanceof Error ? error.message.slice(0, 500) : "Error de captura",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", localOrder.id)
+          .eq("status", "capturing");
+        throw error;
+      }
+    }
+
     const capture = extractCapture(paypalOrder);
 
     if (
@@ -124,11 +212,35 @@ export async function POST(request: Request) {
       capture.captureStatus !== "COMPLETED" ||
       !capture.captureId
     ) {
+      await supabaseAdmin
+        .from("paypal_orders")
+        .update({
+          status: "capture_pending",
+          raw_capture: paypalOrder,
+          failure_reason: "PayPal todavía no confirmó la captura.",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", localOrder.id);
+
       return fail(
         "PayPal no confirmó el pago como completado.",
         409,
         paypalOrder
       );
+    }
+
+    if (!referencesMatch(paypalOrder, localOrder.id)) {
+      await supabaseAdmin
+        .from("paypal_orders")
+        .update({
+          status: "reference_mismatch",
+          raw_capture: paypalOrder,
+          failure_reason: "Las referencias de PayPal no coinciden.",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", localOrder.id);
+
+      return fail("La referencia confirmada no coincide con la orden.", 409);
     }
 
     if (
@@ -196,8 +308,8 @@ export async function POST(request: Request) {
     }
 
     return fail(
-      error instanceof Error ? error.message : "Error capturando el pago.",
-      500
+      publicErrorMessage(error, "No se pudo confirmar el pago."),
+      errorStatus(error)
     );
   }
 }

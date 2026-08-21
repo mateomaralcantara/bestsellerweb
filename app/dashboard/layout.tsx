@@ -1,6 +1,7 @@
 import Link from "next/link";
 import React from "react";
 import { getAdminAccess } from "@/lib/admin-access";
+import { redirect } from "next/navigation";
 
 const dashboardLinks = [
   {
@@ -46,6 +47,11 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const access = await getAdminAccess();
+
+  if (!access.user) {
+    redirect(`/auth?next=${encodeURIComponent("/dashboard")}`);
+  }
+
   const visibleLinks = access.isAdmin
     ? dashboardLinks.flatMap((item) =>
         item.href === "/dashboard/books/purchased"

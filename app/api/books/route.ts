@@ -7,6 +7,15 @@ import {
   DEFAULT_BOOK_DISPLAY_SALES_COUNT,
   mergeBookSocialProofMetadata,
 } from "@/lib/book-social-proof";
+import { assertSafeCoverFile, assertSafePdfFile } from "@/lib/security/files";
+import {
+  errorStatus,
+  requireMultipartFormData,
+  requireTrustedMutation,
+} from "@/lib/security/http";
+import { consumeRateLimit } from "@/lib/security/rate-limit";
+import { normalizeExternalHttpsUrl } from "@/lib/security/urls";
+import { userIsAdmin } from "@/lib/admin-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +30,7 @@ const MAX_COVER_SIZE_MB = 10;
 const MAX_BOOK_SIZE_MB = 100;
 const MAX_COVER_SIZE_BYTES = MAX_COVER_SIZE_MB * 1024 * 1024;
 const MAX_BOOK_SIZE_BYTES = MAX_BOOK_SIZE_MB * 1024 * 1024;
+const MAX_MULTIPART_SIZE_BYTES = 112 * 1024 * 1024;
 
 const ALLOWED_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
 const ALLOWED_BOOK_EXTENSIONS = new Set(["pdf", "epub"]);
@@ -572,7 +582,12 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
     formData,
     "chapter_one_excerpt"
   );
-  const sampleUrlInput = readNullableTextField(formData, "sample_url");
+  const rawSampleUrl = readNullableTextField(formData, "sample_url");
+  const sampleUrlInput = normalizeExternalHttpsUrl(rawSampleUrl);
+
+  if (rawSampleUrl && !sampleUrlInput) {
+    throw new Error("La URL de muestra debe ser una dirección HTTPS válida");
+  }
 
   const primaryNiche = readTextField(formData, "primary_niche");
   const primaryCategory = readTextField(formData, "primary_category");
@@ -850,6 +865,7 @@ async function createBookRecord(params: {
   coverUrl: string;
   bookAssetType: BookAssetType;
   hasPreviewEpub: boolean;
+  allowFeatured: boolean;
 }) {
   const now = new Date().toISOString();
 
@@ -869,7 +885,7 @@ async function createBookRecord(params: {
     slug: params.slug,
     cover_url: params.coverUrl,
     status: params.form.status,
-    featured: params.form.isFeatured,
+    featured: params.allowFeatured && params.form.isFeatured,
 
     description_short: getDescriptionShort({
       explicitShort: params.form.descriptionShortInput,
@@ -1042,7 +1058,27 @@ export async function POST(request: Request) {
   };
 
   try {
+    requireTrustedMutation(request);
+    requireMultipartFormData(request, MAX_MULTIPART_SIZE_BYTES);
+
     const effectiveUser = await getEffectiveUser();
+
+    const rateLimit = await consumeRateLimit(request, {
+      bucket: "books:create",
+      identity: effectiveUser.id,
+      limit: 10,
+      windowSeconds: 3_600,
+    });
+
+    if (!rateLimit.allowed) {
+      return Response.json(
+        { error: "Has realizado demasiados intentos de publicación." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+        }
+      );
+    }
 
     const authorAccess = await getAuthorPublishingAccess(effectiveUser.id);
 
@@ -1053,8 +1089,15 @@ export async function POST(request: Request) {
       );
     }
 
+    const isAdmin = await userIsAdmin(effectiveUser.id);
+
     const formData = await request.formData();
     const form = parseAndValidateForm(formData);
+
+    await Promise.all([
+      assertSafeCoverFile(form.cover),
+      assertSafePdfFile(form.bookFile),
+    ]);
 
     const slug = await generateUniqueSlug(form.title);
 
@@ -1075,6 +1118,7 @@ export async function POST(request: Request) {
       coverUrl: storage.coverUrl,
       bookAssetType: storage.bookAssetType,
       hasPreviewEpub: Boolean(storage.previewPath),
+      allowFeatured: isAdmin,
     });
 
     const insertedBookId = (insertedBook as { id: RecordId }).id;
@@ -1152,9 +1196,12 @@ export async function POST(request: Request) {
     await rollback(rollbackState);
 
     const message = getErrorMessage(error);
+    const status = errorStatus(error, resolveErrorStatus(message));
+    const responseMessage =
+      process.env.NODE_ENV === "production" && status >= 500
+        ? "No se pudo guardar el libro. Inténtalo nuevamente."
+        : message;
 
-    return jsonError(message, resolveErrorStatus(message));
+    return jsonError(responseMessage, status);
   }
 }
-
-

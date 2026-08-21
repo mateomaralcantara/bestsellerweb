@@ -11,6 +11,25 @@ export type AdminAccess = {
   isAdmin: boolean;
 };
 
+export async function userIsAdmin(userId: string) {
+  if (!userId) return false;
+
+  const { data, error } = await supabaseAdmin
+    .from("user_roles")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("No se pudo verificar el rol administrativo:", error.message);
+    return false;
+  }
+
+  return Boolean(data);
+}
+
 export async function getAdminAccess(): Promise<AdminAccess> {
   const supabase = await createClient();
 
@@ -26,23 +45,13 @@ export async function getAdminAccess(): Promise<AdminAccess> {
     };
   }
 
-  const { data: adminRole, error: roleError } = await supabaseAdmin
-    .from("user_roles")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("role", "admin")
-    .limit(1)
-    .maybeSingle();
-
-  if (roleError) {
-    console.error("No se pudo verificar el rol administrativo:", roleError.message);
-  }
+  const isAdmin = await userIsAdmin(user.id);
 
   return {
     user: {
       id: user.id,
       email: user.email ?? null,
     },
-    isAdmin: Boolean(adminRole) && !roleError,
+    isAdmin,
   };
 }

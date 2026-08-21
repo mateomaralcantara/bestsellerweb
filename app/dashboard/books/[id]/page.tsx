@@ -10,9 +10,9 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
 type BookDetail = {
@@ -59,7 +59,8 @@ function formatKeywords(keywords: string[] | null) {
 }
 
 export default async function BookDashboardDetailPage({ params }: PageProps) {
-  const bookId = decodeURIComponent(params.id || "").trim();
+  const { id: rawId } = await params;
+  const bookId = decodeURIComponent(rawId || "").trim();
 
   if (!bookId) {
     redirect("/dashboard/books/published");

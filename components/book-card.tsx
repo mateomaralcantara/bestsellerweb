@@ -87,6 +87,7 @@ export function BookCard({ book }: BookCardProps) {
         <BookSocialProof
           rating={book.rating}
           salesCount={book.sales_count}
+          source={book.metrics_source || "promotional"}
           compact
           className="mt-3"
         />

@@ -4,8 +4,8 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values (
   'book-previews',
   'book-previews',
-  true,
-  52428800,
+  false,
+  15728640,
   array['image/jpeg', 'image/png', 'image/webp']
 )
 on conflict (id) do update
@@ -48,20 +48,11 @@ add column if not exists preview_mode text default 'first_pages',
 add column if not exists preview_generated_at timestamptz,
 add column if not exists preview_error text;
 
-do $$
-begin
-  if not exists (
-    select 1 from pg_policies
-    where schemaname = 'storage'
-      and tablename = 'objects'
-      and policyname = 'Public can read book previews'
-  ) then
-    create policy "Public can read book previews"
-    on storage.objects
-    for select
-    using (bucket_id = 'book-previews');
-  end if;
-end $$;
+drop policy if exists "Public can read book previews" on storage.objects;
+
+alter table public.book_preview_pages enable row level security;
+revoke all on table public.book_preview_pages from anon, authenticated;
+grant all on table public.book_preview_pages to service_role;
 
 do $$
 begin
