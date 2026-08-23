@@ -1234,6 +1234,19 @@ export default function BookReaderClient({
   const visiblePages = useMemo(() => {
     if (totalPages === 0) return [];
 
+    /*
+     * En el preview público mostramos las 25 páginas
+     * disponibles de forma continua.
+     *
+     * El lector completo conserva navegación normal.
+     */
+    if (mode === "preview" && !pdf && imagePages.length > 0) {
+      return Array.from(
+        { length: Math.min(25, imagePages.length) },
+        (_, index) => index + 1
+      );
+    }
+
     if (effectiveViewMode === "single") {
       return [currentPage];
     }
@@ -1241,7 +1254,14 @@ export default function BookReaderClient({
     return [currentPage, currentPage + 1].filter(
       (pageNumber) => pageNumber <= totalPages
     );
-  }, [currentPage, effectiveViewMode, totalPages]);
+  }, [
+    currentPage,
+    effectiveViewMode,
+    imagePages.length,
+    mode,
+    pdf,
+    totalPages,
+  ]);
 
   const pageWidth = useMemo(() => {
     const horizontalPadding = stageSize.width < 640 ? 24 : 72;
@@ -1726,9 +1746,11 @@ export default function BookReaderClient({
             <div
               className={[
                 "flex min-h-full min-w-full items-start justify-center gap-7 px-3 py-5 sm:px-8 sm:py-7",
-                effectiveViewMode === "spread"
-                  ? "flex-row"
-                  : "flex-col items-center",
+                mode === "preview"
+                  ? "flex-col items-center"
+                  : effectiveViewMode === "spread"
+                    ? "flex-row"
+                    : "flex-col items-center",
               ].join(" ")}
             >
               {visiblePages.map((pageNumber) => (
