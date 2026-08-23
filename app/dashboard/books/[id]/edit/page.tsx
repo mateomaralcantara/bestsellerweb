@@ -1,13 +1,13 @@
-import { notFound, redirect } from "next/navigation";
+﻿import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import EditBookForm from "./EditBookForm";
 
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
 type BookForEdit = {
@@ -107,7 +107,7 @@ function getEditLoginRedirect(bookId: string) {
 }
 
 export default async function EditBookPage({ params }: PageProps) {
-  const bookId = normalizeBookId(params.id);
+  const bookId = normalizeBookId((await params).id);
 
   if (!bookId) {
     notFound();

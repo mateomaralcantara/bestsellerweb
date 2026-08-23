@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getBookCheckoutItem } from "@/lib/paypal/book-checkout";
 import { createPayPalOrder, PayPalApiError } from "@/lib/paypal/client";
 import { userAlreadyOwnsBook } from "@/lib/paypal/purchases";
+import { buildRateLimitHeaders, consumePayPalRateLimit } from "@/lib/security/paypal-rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +52,27 @@ export async function POST(request: Request) {
 
     if (authError || !user) {
       return fail("Debes iniciar sesión para comprar.", 401);
+    }
+    const rateLimitMax = 10;
+    const rateLimit = await consumePayPalRateLimit({
+      route: "paypal:create-order",
+      userId: user.id,
+      limit: rateLimitMax,
+      windowSeconds: 300,
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Demasiadas solicitudes de pago. IntÃ©ntalo nuevamente en unos minutos.",
+        },
+        {
+          status: 429,
+          headers: buildRateLimitHeaders(rateLimit, rateLimitMax),
+        }
+      );
     }
 
     const body = (await request.json().catch(() => null)) as

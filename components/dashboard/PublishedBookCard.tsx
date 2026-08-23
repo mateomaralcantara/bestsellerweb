@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { BookOpen, Tags } from "lucide-react";
 
@@ -47,11 +48,14 @@ export default function PublishedBookCard({ book }: PublishedBookCardProps) {
     <article className="group overflow-hidden rounded-[28px] border border-slate-200 bg-white/90 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl">
       <div className="relative aspect-[3/4] overflow-hidden bg-slate-100">
         {book.cover_url ? (
-          <img
+          <Image
             src={book.cover_url}
             alt={book.title}
             className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
-          />
+
+              width={600}
+              height={900}
+              sizes="(max-width: 768px) 50vw, 240px"/>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-slate-500">
             <BookOpen className="h-8 w-8" />

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -6,9 +6,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     bookkey: string;
-  };
+  }>;
 };
 
 type BookRow = {
@@ -148,7 +148,7 @@ function getAverageRating(comments: CommentRow[]) {
 
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
-    const bookkey = safeBookKey(params.bookkey);
+    const bookkey = safeBookKey((await params).bookkey);
 
     if (!bookkey) {
       return jsonResponse({ error: "Libro inválido." }, 400);
@@ -262,7 +262,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
 export async function POST(request: Request, { params }: RouteContext) {
   try {
-    const bookkey = safeBookKey(params.bookkey);
+    const bookkey = safeBookKey((await params).bookkey);
 
     if (!bookkey) {
       return jsonResponse({ error: "Libro inválido." }, 400);
@@ -362,7 +362,7 @@ export async function POST(request: Request, { params }: RouteContext) {
 
 export async function DELETE(request: Request, { params }: RouteContext) {
   try {
-    const bookkey = safeBookKey(params.bookkey);
+    const bookkey = safeBookKey((await params).bookkey);
     const viewer = await getViewer();
 
     if (!viewer) {

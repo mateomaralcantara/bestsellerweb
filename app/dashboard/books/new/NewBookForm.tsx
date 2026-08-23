@@ -592,15 +592,19 @@ export default function NewBookForm() {
 
       restoreDraft(form, draft);
 
-      if (typeof draft.primary_niche === "string") {
-        setSelectedNiche(draft.primary_niche);
-      }
+      const restoreTimer = window.setTimeout(() => {
+        if (typeof draft.primary_niche === "string") {
+          setSelectedNiche(draft.primary_niche);
+        }
 
-      if (typeof draft.primary_category === "string") {
-        setSelectedCategory(draft.primary_category);
-      }
+        if (typeof draft.primary_category === "string") {
+          setSelectedCategory(draft.primary_category);
+        }
 
-      setDraftRestored(true);
+        setDraftRestored(true);
+      }, 0);
+
+      return () => window.clearTimeout(restoreTimer);
     } catch {
       localStorage.removeItem(DRAFT_KEY);
     }

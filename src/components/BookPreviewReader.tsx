@@ -1,3 +1,6 @@
+/* Book preview pages use runtime-generated page-image URLs and reader layout. */
+/* eslint-disable @next/next/no-img-element */
+
 import React, { useMemo, useState } from "react";
 
 type PreviewPage = {

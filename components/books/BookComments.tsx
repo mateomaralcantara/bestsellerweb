@@ -149,7 +149,11 @@ export function BookComments({ bookSlug, bookTitle }: BookCommentsProps) {
   }, [endpoint]);
 
   useEffect(() => {
-    void loadComments();
+    const timer = window.setTimeout(() => {
+      void loadComments();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [loadComments]);
 
   async function submitComment(event: FormEvent<HTMLFormElement>) {

@@ -2,6 +2,7 @@
 // ARCHIVO: app/catalog/[slug]/page.tsx
 // ============================================
 
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
@@ -30,9 +31,9 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type PageProps = {
-  params: {
+  params: Promise<{
     slug: string;
-  };
+  }>;
 };
 
 type BookRecord = {
@@ -484,7 +485,7 @@ function TextSection({
 }
 
 export default async function BookPublicPage({ params }: PageProps) {
-  const slug = decodeURIComponent(params.slug || "").trim();
+  const slug = decodeURIComponent((await params).slug || "").trim();
 
   if (!slug) {
     notFound();
@@ -569,11 +570,14 @@ export default async function BookPublicPage({ params }: PageProps) {
           <aside className="space-y-5 lg:sticky lg:top-28">
             <div className="rounded-[34px] border border-white/15 bg-white/10 p-5 shadow-[0_35px_90px_rgba(0,0,0,0.28)] backdrop-blur-xl">
               {coverUrl ? (
-                <img
+                <Image
                   src={coverUrl}
                   alt={`Portada de ${book.title}`}
                   className="book-cover-shadow aspect-[3/4] w-full rounded-r-[20px] rounded-l-md object-cover"
-                />
+
+              width={600}
+              height={900}
+              sizes="(max-width: 768px) 50vw, 240px"/>
               ) : (
                 <div className="flex aspect-[3/4] w-full items-center justify-center rounded-[24px] border border-dashed border-white/25 bg-white/10 text-sm text-slate-300">
                   Sin portada

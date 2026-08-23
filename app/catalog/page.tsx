@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import {
   BookOpen,
@@ -12,10 +13,10 @@ import type { Book } from "@/lib/types";
 import { BookSocialProof } from "@/components/books/BookSocialProof";
 
 type CatalogPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     category?: string;
     q?: string;
-  };
+  }>;
 };
 
 type CatalogAuthor = {
@@ -423,11 +424,14 @@ function AmazonBookRow({ book }: { book: CatalogBook }) {
           className="relative flex items-center justify-center overflow-hidden bg-gradient-to-br from-[#e7f0ff] via-white to-[#e8fbff] p-6"
         >
           <span className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-blue-300/25 blur-2xl" />
-          <img
+          <Image
             src={getCover(book)}
             alt={book.title}
             className="book-cover-shadow relative aspect-[2/3] w-full max-w-[140px] rounded-r-lg rounded-l-sm object-cover transition duration-500 group-hover:-translate-y-1 group-hover:rotate-1 group-hover:scale-[1.025]"
-          />
+
+              width={600}
+              height={900}
+              sizes="(max-width: 768px) 50vw, 240px"/>
         </Link>
 
         <div className="space-y-3 p-6">
@@ -540,6 +544,7 @@ function AmazonBookRow({ book }: { book: CatalogBook }) {
 ========================================================= */
 
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
+  const resolvedSearchParams = await searchParams;
   const [rawBooks, rawCategories] = await Promise.all([
     getBooks(),
     getBookCategories(),
@@ -548,8 +553,8 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   const books = rawBooks as CatalogBook[];
   const baseCategories = rawCategories as string[];
 
-  const selectedCategory = searchParams?.category?.trim() || "";
-  const query = searchParams?.q?.trim() || "";
+  const selectedCategory = resolvedSearchParams?.category?.trim() || "";
+  const query = resolvedSearchParams?.q?.trim() || "";
 
   const sidebarCategories = getSidebarCategories({
     books,

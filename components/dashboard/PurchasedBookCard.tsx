@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { BookOpen, CalendarDays, CreditCard } from "lucide-react";
 import type { ActivePurchaseRow } from "@/lib/admin-purchases";
@@ -40,11 +41,14 @@ export default function PurchasedBookCard({
     <article className="group overflow-hidden rounded-[28px] border border-emerald-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl">
       <div className="relative aspect-[3/4] overflow-hidden bg-slate-100">
         {purchase.coverUrl ? (
-          <img
+          <Image
             src={purchase.coverUrl}
             alt={purchase.bookTitle}
             className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
-          />
+
+              width={600}
+              height={900}
+              sizes="(max-width: 768px) 50vw, 240px"/>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-slate-400">
             <BookOpen className="h-10 w-10" />

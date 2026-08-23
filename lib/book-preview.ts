@@ -1,4 +1,4 @@
-const PREVIEW_PAGE_SCAN_LIMIT = 40;
+﻿const PREVIEW_PAGE_SCAN_LIMIT = 40;
 const MAX_ARGUMENT_CHARS = 4000;
 const MAX_SECTION_CHARS = 120000;
 
@@ -7,21 +7,6 @@ export type ExtractedBookPreview = {
   introduction: string | null;
   chapterOne: string | null;
   source: "pdf" | "epub" | "unsupported";
-};
-
-type PdfJsModule = {
-  getDocument: (options: Record<string, unknown>) => {
-    promise: Promise<{
-      numPages: number;
-      getPage: (pageNumber: number) => Promise<{
-        getTextContent: () => Promise<{
-          items: Array<{ str?: string }>;
-        }>;
-        cleanup: () => void;
-      }>;
-      destroy: () => Promise<void> | void;
-    }>;
-  };
 };
 
 function getExtension(fileName: string): string {
@@ -58,8 +43,8 @@ async function detectFileKind(
   return "unsupported";
 }
 
-async function loadPdfJs(): Promise<PdfJsModule> {
-  return (await import("pdfjs-dist/legacy/build/pdf.mjs")) as PdfJsModule;
+async function loadPdfJs() {
+  return import("pdfjs-dist/legacy/build/pdf.mjs");
 }
 
 function normalizeSearchText(value: string): string {
@@ -179,8 +164,7 @@ async function extractPdfPreview(file: File): Promise<ExtractedBookPreview> {
     data: bytes,
     useSystemFonts: true,
     disableFontFace: true,
-    isEvalSupported: false,
-  });
+});
 
   const pdfDoc = await loadingTask.promise;
   const pages: Array<{ text: string; searchable: string }> = [];
@@ -209,7 +193,7 @@ async function extractPdfPreview(file: File): Promise<ExtractedBookPreview> {
     }
   } finally {
     try {
-      await pdfDoc.destroy();
+      await loadingTask.destroy();
     } catch {
       // noop
     }

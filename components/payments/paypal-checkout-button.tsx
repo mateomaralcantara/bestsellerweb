@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type ButtonsInstance = {
   render: (container: HTMLElement) => Promise<void>;
@@ -47,6 +48,7 @@ export function PayPalCheckoutButton({
   clientId,
   currency,
 }: Props) {
+  const router = useRouter();
   const reactId = useId();
   const containerId = `paypal-${reactId.replace(/:/g, "")}`;
   const instanceRef = useRef<ButtonsInstance | null>(null);
@@ -136,11 +138,7 @@ export function PayPalCheckoutButton({
             const payload = (await response.json()) as ApiPayload;
 
             if (payload.alreadyPurchased) {
-              window.location.assign(
-                `/checkout/paypal/success?bookId=${encodeURIComponent(
-                  bookId
-                )}`
-              );
+              router.push(`/checkout/paypal/success?bookId=${encodeURIComponent(bookId)}`);
               throw new Error("Ya tienes acceso a este libro.");
             }
 
@@ -230,7 +228,7 @@ export function PayPalCheckoutButton({
       }
       instanceRef.current = null;
     };
-  }, [bookId, clientId, containerId, currency]);
+  }, [bookId, clientId, containerId, currency, router]);
 
   return (
     <div className="space-y-4">

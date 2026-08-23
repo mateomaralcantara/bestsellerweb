@@ -62,8 +62,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    setItems(readStoredCart());
-    setHydrated(true);
+    const timer = window.setTimeout(() => {
+      setItems(readStoredCart());
+      setHydrated(true);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {

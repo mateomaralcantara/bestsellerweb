@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
@@ -11,9 +11,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     bookkey: string;
-  };
+  }>;
 };
 
 function jsonError(message: string, status: number) {
@@ -50,7 +50,7 @@ function getFileName(title: string) {
 
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
-    const slug = getSafeSlug(params.bookkey);
+    const slug = getSafeSlug((await params).bookkey);
 
     if (!slug) {
       return jsonError("Slug inválido.", 400);

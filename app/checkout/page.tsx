@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -71,11 +72,14 @@ export default function CheckoutPage() {
                 >
                   <div className="flex gap-4">
                     {item.cover_url ? (
-                      <img
+                      <Image
                         src={item.cover_url}
                         alt={item.title}
                         className="book-cover-shadow h-36 w-24 shrink-0 rounded-r-lg rounded-l-sm object-cover"
-                      />
+
+              width={600}
+              height={900}
+              sizes="(max-width: 768px) 50vw, 240px"/>
                     ) : (
                       <div className="flex h-32 w-24 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
                         <ShoppingBag className="h-7 w-7" />

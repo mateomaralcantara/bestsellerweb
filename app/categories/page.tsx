@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -236,11 +237,14 @@ export default async function CategoriesPage() {
                           title={book.title}
                         >
                           {book.cover_url ? (
-                            <img
+                            <Image
                               src={book.cover_url}
                               alt={book.title}
                               className="aspect-[3/4] w-full object-cover transition group-hover/book:scale-105"
-                            />
+
+              width={600}
+              height={900}
+              sizes="(max-width: 768px) 50vw, 240px"/>
                           ) : (
                             <div className="flex aspect-[3/4] items-center justify-center px-2 text-center text-[10px] text-slate-400">
                               Sin portada

@@ -1,12 +1,18 @@
-﻿// ============================================
+// ============================================
 // ARCHIVO: components/readers/EpubReaderClient.tsx
 // ============================================
 
 "use client";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type JSZip from "jszip";
+import type {
+  Book as EpubBook,
+  RelocatedLocation,
+  Rendition as EpubRendition,
+} from "epubjs";
 
 type EpubReaderClientProps = {
   title: string;
@@ -31,8 +37,8 @@ type ManualBook = {
 };
 
 type LoadedReader = {
-  book: any | null;
-  rendition: any | null;
+  book: EpubBook | null;
+  rendition: EpubRendition | null;
   blobUrl: string | null;
   resourceUrls: string[];
 };
@@ -299,7 +305,7 @@ function getElementsByLocalName(document: Document, localName: string) {
   return Array.from(document.getElementsByTagName(localName));
 }
 
-async function readZipText(zip: any, filePath: string) {
+async function readZipText(zip: JSZip, filePath: string) {
   const cleanPath = filePath.replace(/^\/+/, "");
   const file = zip.file(cleanPath);
 
@@ -310,7 +316,7 @@ async function readZipText(zip: any, filePath: string) {
   return await file.async("text");
 }
 
-async function createResourceUrlMap(zip: any) {
+async function createResourceUrlMap(zip: JSZip) {
   const resourceUrls = new Map<string, string>();
   const cleanupUrls: string[] = [];
 
@@ -757,15 +763,7 @@ export default function EpubReaderClient({
     loadedReaderRef.current?.rendition?.prev?.();
   }, [engine]);
 
-  useEffect(() => {
-    if (engine !== "manual" || !manualBook) {
-      return;
-    }
 
-    setLocationLabel(
-      `Capítulo ${manualIndex + 1} de ${manualBook.chapters.length}`
-    );
-  }, [engine, manualBook, manualIndex]);
 
   useEffect(() => {
     let cancelled = false;
@@ -777,7 +775,7 @@ export default function EpubReaderClient({
       }
 
       const epubModule = await import("epubjs");
-      const createBook = (epubModule as any).default || epubModule;
+      const createBook = epubModule.default;
 
       const book = createBook(arrayBuffer, {
         openAs: "epub",
@@ -798,7 +796,7 @@ export default function EpubReaderClient({
         resourceUrls: [],
       };
 
-      rendition.on("relocated", (location: any) => {
+      rendition.on("relocated", (location: RelocatedLocation) => {
         const current =
           location?.start?.displayed?.page ||
           location?.start?.index ||
@@ -997,6 +995,11 @@ export default function EpubReaderClient({
       ? manualBook.chapters[manualIndex]
       : null;
 
+  const displayLocationLabel =
+    engine === "manual" && manualBook
+      ? `Capitulo ${manualIndex + 1} de ${manualBook.chapters.length}`
+      : locationLabel;
+
   return (
     <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
@@ -1010,7 +1013,7 @@ export default function EpubReaderClient({
           </h2>
 
           <p className="mt-1 text-xs text-slate-500">
-            {locationLabel}
+            {displayLocationLabel}
             {engine === "manual" && status === "ready"
               ? " · lector alternativo"
               : ""}
@@ -1054,7 +1057,7 @@ export default function EpubReaderClient({
                 Preparando EPUB...
               </p>
 
-              <p className="mt-2 text-sm text-slate-500">{locationLabel}</p>
+              <p className="mt-2 text-sm text-slate-500">{displayLocationLabel}</p>
             </div>
           </div>
         )}

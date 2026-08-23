@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+﻿import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
   getPublishedBookBySlug,
@@ -9,9 +9,9 @@ import BookReaderClient from "./BookReaderClient";
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  params: {
+  params: Promise<{
     slug: string;
-  };
+  }>;
 };
 
 function getLoginUrl(slug: string) {
@@ -23,7 +23,7 @@ function getCheckoutUrl(slug: string) {
 }
 
 export default async function ReaderPage({ params }: PageProps) {
-  const slug = decodeURIComponent(params.slug || "").trim();
+  const slug = decodeURIComponent((await params).slug || "").trim();
 
   if (!slug) {
     notFound();

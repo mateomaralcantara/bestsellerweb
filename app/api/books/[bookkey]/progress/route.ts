@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import {
   getPublishedBookBySlug,
   userCanReadBook,
@@ -10,9 +10,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     bookkey: string;
-  };
+  }>;
 };
 
 type ProgressPayload = {
@@ -121,7 +121,7 @@ async function getAuthorizedReader(bookkey: string) {
 
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
-    const bookkey = safeBookKey(params.bookkey);
+    const bookkey = safeBookKey((await params).bookkey);
 
     if (!bookkey) {
       return jsonResponse({ error: "Libro inválido." }, 400);
@@ -162,7 +162,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
 async function saveProgress(request: Request, { params }: RouteContext) {
   try {
-    const bookkey = safeBookKey(params.bookkey);
+    const bookkey = safeBookKey((await params).bookkey);
 
     if (!bookkey) {
       return jsonResponse({ error: "Libro inválido." }, 400);

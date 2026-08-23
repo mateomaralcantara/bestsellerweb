@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowUpRight,
@@ -47,12 +48,15 @@ export function BookCard({ book }: BookCardProps) {
 
         <div className="relative mx-auto w-[64%] max-w-[210px] transition duration-500 group-hover:-translate-y-1 group-hover:rotate-1 group-hover:scale-[1.03]">
           {coverUrl ? (
-            <img
+            <Image
               src={coverUrl}
               alt={`Portada de ${book.title}`}
               className="book-cover-shadow aspect-[2/3] w-full rounded-r-lg rounded-l-sm object-cover"
               draggable={false}
-            />
+
+              width={600}
+              height={900}
+              sizes="(max-width: 768px) 50vw, 240px"/>
           ) : (
             <div className="book-cover-shadow flex aspect-[2/3] w-full flex-col justify-between rounded-r-lg rounded-l-sm bg-gradient-to-br from-[#155eef] to-[#07111f] p-5 text-white">
               <BookOpen className="h-7 w-7 text-cyan-200" />

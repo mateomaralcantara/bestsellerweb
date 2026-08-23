@@ -1,5 +1,8 @@
 "use client";
 
+
+/* PDF/reader pages and thumbnails use runtime dimensions and generated page-image URLs. */
+/* eslint-disable @next/next/no-img-element */
 import {
   ArrowLeft,
   BookOpen,
@@ -351,9 +354,13 @@ function PdfThumbnail({
   const [visible, setVisible] = useState(active);
 
   useEffect(() => {
-    if (active) {
+    if (!active) return;
+
+    const timer = window.setTimeout(() => {
       setVisible(true);
-    }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [active]);
 
   useEffect(() => {
@@ -828,9 +835,12 @@ export default function BookReaderClient({
   }, [chromeVisible, scheduleChromeHide]);
 
   useEffect(() => {
-    scheduleChromeHide();
+    const kickoffTimer = window.setTimeout(() => {
+      scheduleChromeHide();
+    }, 0);
 
     return () => {
+      window.clearTimeout(kickoffTimer);
       if (chromeTimerRef.current !== null) {
         window.clearTimeout(chromeTimerRef.current);
         chromeTimerRef.current = null;
@@ -840,7 +850,7 @@ export default function BookReaderClient({
 
   useEffect(() => {
     let cancelled = false;
-    let localPdf: PDFDocumentProxy | null = null;
+    let localLoadingTask: { destroy: () => Promise<void> } | null = null;
 
     async function loadDocument() {
       try {
@@ -896,17 +906,17 @@ export default function BookReaderClient({
           withCredentials: false,
         });
 
+        localLoadingTask = loadingTask;
+
         const [document, savedProgress] = await Promise.all([
           loadingTask.promise,
           savedProgressPromise,
         ]);
 
         if (cancelled) {
-          await document.destroy();
+          await loadingTask.destroy();
           return;
         }
-
-        localPdf = document;
         const initialPage = clamp(
           savedProgress.snapshot?.currentPage ?? 1,
           1,
@@ -948,7 +958,7 @@ export default function BookReaderClient({
     return () => {
       cancelled = true;
       progressInitializedRef.current = false;
-      void localPdf?.destroy();
+      void localLoadingTask?.destroy();
     };
   }, [imagePages, loadSavedProgress, mode, pdfUrl]);
 
@@ -1184,25 +1194,29 @@ export default function BookReaderClient({
         fitMode?: FitMode;
       };
 
-      if (
-        settings.theme === "paper" ||
-        settings.theme === "sepia" ||
-        settings.theme === "night"
-      ) {
-        setTheme(settings.theme);
-      } else if (typeof settings.dark === "boolean") {
-        setTheme(settings.dark ? "night" : "paper");
-      }
+      const settingsTimer = window.setTimeout(() => {
+        if (
+          settings.theme === "paper" ||
+          settings.theme === "sepia" ||
+          settings.theme === "night"
+        ) {
+          setTheme(settings.theme);
+        } else if (typeof settings.dark === "boolean") {
+          setTheme(settings.dark ? "night" : "paper");
+        }
 
-      if (settings.viewMode === "single" || settings.viewMode === "spread") {
-        setViewMode(settings.viewMode);
-      }
+        if (settings.viewMode === "single" || settings.viewMode === "spread") {
+          setViewMode(settings.viewMode);
+        }
 
-      if (settings.fitMode === "page" || settings.fitMode === "width") {
-        setFitMode(settings.fitMode);
-      }
+        if (settings.fitMode === "page" || settings.fitMode === "width") {
+          setFitMode(settings.fitMode);
+        }
+      }, 0);
+
+      return () => window.clearTimeout(settingsTimer);
     } catch {
-      // La preferencia local es opcional.
+      // Reader preferences are optional.
     }
   }, []);
 

@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+
+/* Generated book-preview pages and thumbnails use runtime page-image URLs. */
+/* eslint-disable @next/next/no-img-element */
+import Image from "next/image";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   BookOpen,
@@ -102,7 +106,30 @@ export function LookInsidePreview({
   const currentFallbackPage =
     fallbackPages[currentPageIndex] ?? fallbackPages[0];
 
-  const totalPages = hasVisualPages ? visualPages.length : fallbackPages.length;
+  const totalPages = hasVisualPages ? visualPages.length : fallbackPages.length;function openPreview() {
+    if (!hasPreview) return;
+
+    setCurrentPageIndex(0);
+    setZoom(1);
+    setOpen(true);
+  }
+
+  const goPrevious = useCallback(() => {
+    if (totalPages <= 1) return;
+
+    setCurrentPageIndex((current) =>
+      current <= 0 ? totalPages - 1 : current - 1
+    );
+  }, [totalPages]);
+
+  const goNext = useCallback(() => {
+    if (totalPages <= 1) return;
+
+    setCurrentPageIndex((current) =>
+      current >= totalPages - 1 ? 0 : current + 1
+    );
+  }, [totalPages]);
+
 
   useEffect(() => {
     if (!open) return;
@@ -130,31 +157,9 @@ export function LookInsidePreview({
       document.body.style.overflow = originalOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open, currentPageIndex, totalPages]);
+  }, [open, goNext, goPrevious]);
 
-  function openPreview() {
-    if (!hasPreview) return;
 
-    setCurrentPageIndex(0);
-    setZoom(1);
-    setOpen(true);
-  }
-
-  function goPrevious() {
-    if (totalPages <= 1) return;
-
-    setCurrentPageIndex((current) =>
-      current <= 0 ? totalPages - 1 : current - 1
-    );
-  }
-
-  function goNext() {
-    if (totalPages <= 1) return;
-
-    setCurrentPageIndex((current) =>
-      current >= totalPages - 1 ? 0 : current + 1
-    );
-  }
 
   function zoomOut() {
     setZoom((value) => Math.max(0.75, Number((value - 0.1).toFixed(2))));
@@ -255,11 +260,14 @@ export function LookInsidePreview({
               <aside className="hidden overflow-y-auto border-r border-slate-300 bg-[#fafafa] p-4 lg:block">
                 <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
                   {coverUrl ? (
-                    <img
+                    <Image
                       src={coverUrl}
                       alt={`Portada de ${title}`}
                       className="aspect-[3/4] w-full rounded-lg object-cover"
-                    />
+
+                      width={600}
+                      height={800}
+                      sizes="250px"/>
                   ) : (
                     <div className="flex aspect-[3/4] items-center justify-center rounded-lg bg-slate-100 text-sm text-slate-500">
                       Sin portada

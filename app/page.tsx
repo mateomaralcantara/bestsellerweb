@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -144,11 +145,14 @@ export default async function HomePage() {
 
               <div className="mt-6 grid grid-cols-[135px_minmax(0,1fr)] items-center gap-5 sm:grid-cols-[175px_minmax(0,1fr)]">
                 {heroBook?.cover_url ? (
-                  <img
+                  <Image
                     src={heroBook.cover_url}
                     alt={heroBook.title}
                     className="book-cover-shadow aspect-[2/3] w-full rounded-r-xl rounded-l-sm object-cover"
-                  />
+
+              width={600}
+              height={900}
+              sizes="(max-width: 768px) 50vw, 240px"/>
                 ) : (
                   <div className="book-cover-shadow flex aspect-[2/3] w-full flex-col justify-between rounded-r-xl rounded-l-sm bg-gradient-to-br from-[#155eef] to-[#07111f] p-5 ring-1 ring-white/20">
                     <BookOpenText className="h-8 w-8 text-cyan-200" />

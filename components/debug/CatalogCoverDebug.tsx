@@ -1,5 +1,8 @@
 "use client";
 
+
+/* Diagnostic component intentionally renders the exact raw image URL being inspected. */
+/* eslint-disable @next/next/no-img-element */
 import { useEffect, useState } from "react";
 
 type Props = {

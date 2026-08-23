@@ -10,7 +10,7 @@ import {
   ShoppingBag,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/components/cart-provider";
 import { isImmersiveReaderRoute } from "@/lib/immersive-reader-route";
@@ -29,13 +29,10 @@ function isActivePath(pathname: string | null, href: string) {
 }
 
 export function SiteHeader() {
-  const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const [openPath, setOpenPath] = useState<string | null>(null);
+  const open = openPath === pathname;
   const { itemCount } = useCart();
-
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
 
   if (isImmersiveReaderRoute(pathname)) {
     return null;
@@ -120,7 +117,7 @@ export function SiteHeader() {
 
         <button
           type="button"
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => setOpenPath((value) => (value === pathname ? null : pathname))}
           className="flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white md:hidden"
           aria-label={open ? "Cerrar menú" : "Abrir menú"}
           aria-expanded={open}

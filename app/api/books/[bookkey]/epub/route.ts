@@ -1,4 +1,4 @@
-// ============================================
+﻿// ============================================
 // ARCHIVO: app/api/books/[bookkey]/epub/route.ts
 // ============================================
 
@@ -10,9 +10,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     bookkey: string;
-  };
+  }>;
 };
 
 type ReadMode = "preview" | "full";
@@ -186,7 +186,7 @@ async function downloadEpubAsset(asset: BookAsset) {
 
 export async function GET(request: Request, { params }: RouteContext) {
   try {
-    const bookkey = safeBookKey(params.bookkey);
+    const bookkey = safeBookKey((await params).bookkey);
 
     if (!bookkey) {
       return jsonError("Identificador de libro inválido.", 400);

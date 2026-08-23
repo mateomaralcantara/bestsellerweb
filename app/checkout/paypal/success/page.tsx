@@ -7,9 +7,9 @@ import { RemovePurchasedCartItem } from "@/components/payments/remove-purchased-
 export const dynamic = "force-dynamic";
 
 type Props = {
-  searchParams?: {
+  searchParams?: Promise<{
     bookId?: string;
-  };
+  }>;
 };
 
 type Purchase = {
@@ -28,7 +28,8 @@ function getBook(purchase: Purchase) {
 }
 
 export default async function SuccessPage({ searchParams }: Props) {
-  const bookId = searchParams?.bookId?.trim() || "";
+  const resolvedSearchParams = await searchParams;
+  const bookId = resolvedSearchParams?.bookId?.trim() || "";
 
   const supabase = await createClient();
   const {

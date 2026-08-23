@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
@@ -16,9 +17,9 @@ import { FuturePaymentMethods } from "@/components/payments/future-payment-metho
 export const dynamic = "force-dynamic";
 
 type Props = {
-  searchParams?: {
+  searchParams?: Promise<{
     bookId?: string;
-  };
+  }>;
 };
 
 function money(amount: string, currency: string) {
@@ -36,7 +37,8 @@ function money(amount: string, currency: string) {
 export default async function PayPalCheckoutPage({
   searchParams,
 }: Props) {
-  const bookId = searchParams?.bookId?.trim() || "";
+  const resolvedSearchParams = await searchParams;
+  const bookId = resolvedSearchParams?.bookId?.trim() || "";
   if (!bookId) notFound();
 
   const supabase = await createClient();
@@ -148,11 +150,14 @@ export default async function PayPalCheckoutPage({
           <div className="flex flex-col gap-6 sm:flex-row">
             <div className="flex shrink-0 items-center justify-center rounded-[26px] bg-gradient-to-br from-[#e7f0ff] via-white to-[#e8fbff] p-5 sm:w-48">
               {book.coverUrl ? (
-                <img
+                <Image
                   src={book.coverUrl}
                   alt={book.title}
                   className="book-cover-shadow h-56 w-36 rounded-r-lg rounded-l-sm object-cover"
-                />
+
+              width={600}
+              height={900}
+              sizes="(max-width: 768px) 50vw, 240px"/>
               ) : (
                 <div className="flex h-56 w-36 items-center justify-center rounded-lg bg-slate-200 text-xs font-bold text-slate-500">
                   Sin portada

@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+﻿import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import BookReaderClient from "@/app/reader/[slug]/BookReaderClient";
 
@@ -8,9 +8,9 @@ const PREVIEW_PAGE_LIMIT = 25;
 const PREVIEW_BUCKET = "book-previews";
 
 type PreviewPageProps = {
-  params: {
+  params: Promise<{
     slug: string;
-  };
+  }>;
 };
 
 type BookRow = {
@@ -52,7 +52,7 @@ function getPreviewImageUrl(page: PreviewPageRow) {
 }
 
 export default async function CatalogPreviewPage({ params }: PreviewPageProps) {
-  const slug = decodeURIComponent(params.slug || "").trim();
+  const slug = decodeURIComponent((await params).slug || "").trim();
 
   if (!slug) {
     notFound();

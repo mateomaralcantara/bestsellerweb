@@ -2,6 +2,7 @@
 // ARCHIVO: app/dashboard/books/[id]/page.tsx
 // ============================================
 
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -10,9 +11,9 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
 type BookDetail = {
@@ -59,7 +60,7 @@ function formatKeywords(keywords: string[] | null) {
 }
 
 export default async function BookDashboardDetailPage({ params }: PageProps) {
-  const bookId = decodeURIComponent(params.id || "").trim();
+  const bookId = decodeURIComponent((await params).id || "").trim();
 
   if (!bookId) {
     redirect("/dashboard/books/published");
@@ -201,11 +202,14 @@ export default async function BookDashboardDetailPage({ params }: PageProps) {
       <section className="grid gap-6 lg:grid-cols-[260px_1fr]">
         <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
           {book.cover_url ? (
-            <img
+            <Image
               src={book.cover_url}
               alt={book.title}
               className="w-full rounded-2xl border border-slate-200"
-            />
+
+              width={600}
+              height={900}
+              sizes="(max-width: 768px) 50vw, 240px"/>
           ) : (
             <div className="flex aspect-[3/4] items-center justify-center rounded-2xl bg-slate-100 text-sm text-slate-500">
               Sin portada

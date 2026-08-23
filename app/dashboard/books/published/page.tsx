@@ -2,6 +2,7 @@
 // ARCHIVO: app/dashboard/books/published/page.tsx
 // ============================================
 
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -67,11 +68,14 @@ function PublishedBookCard({ book }: { book: PublishedBook }) {
     <article className="group overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl">
       <div className="relative aspect-[3/4] overflow-hidden bg-slate-100">
         {book.cover_url ? (
-          <img
+          <Image
             src={book.cover_url}
             alt={book.title}
             className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
-          />
+
+              width={600}
+              height={900}
+              sizes="(max-width: 768px) 50vw, 240px"/>
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-slate-500">
             Sin portada

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
@@ -16,10 +17,12 @@ import {
 
 export const dynamic = "force-dynamic";
 
+type PurchaseSearchParams = {
+  q?: string | string[];
+};
+
 type PageProps = {
-  searchParams?: {
-    q?: string | string[];
-  };
+  searchParams?: Promise<PurchaseSearchParams>;
 };
 
 type UserPurchaseGroup = {
@@ -30,7 +33,7 @@ type UserPurchaseGroup = {
   latestPurchaseAt: string | null;
 };
 
-function readSearch(searchParams?: PageProps["searchParams"]) {
+function readSearch(searchParams?: PurchaseSearchParams) {
   const raw = searchParams?.q;
   return (Array.isArray(raw) ? raw[0] : raw || "").trim().slice(0, 120);
 }
@@ -184,6 +187,7 @@ function AccessDenied() {
 }
 
 export default async function PurchasesPage({ searchParams }: PageProps) {
+  const resolvedSearchParams = await searchParams;
   const access = await getAdminAccess();
 
   if (!access.user) {
@@ -204,7 +208,7 @@ export default async function PurchasesPage({ searchParams }: PageProps) {
       error instanceof Error ? error.message : "No se pudo cargar el registro.";
   }
 
-  const search = readSearch(searchParams);
+  const search = readSearch(resolvedSearchParams);
   const visiblePurchases = filterPurchases(purchases, search);
   const groups = groupByUser(visiblePurchases);
   const uniqueBooks = new Set(visiblePurchases.map((row) => row.bookId)).size;
@@ -338,11 +342,14 @@ export default async function PurchasesPage({ searchParams }: PageProps) {
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           {purchase.coverUrl ? (
-                            <img
+                            <Image
                               src={purchase.coverUrl}
                               alt=""
                               className="h-14 w-10 shrink-0 rounded object-cover"
-                            />
+
+              width={600}
+              height={900}
+              sizes="(max-width: 768px) 50vw, 240px"/>
                           ) : (
                             <div className="flex h-14 w-10 shrink-0 items-center justify-center rounded bg-slate-100">
                               <BookOpen className="h-4 w-4 text-slate-400" />

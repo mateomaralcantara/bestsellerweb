@@ -1,4 +1,4 @@
-// ============================================
+﻿// ============================================
 // ARCHIVO: app/api/books/[bookkey]/route.ts
 // ============================================
 
@@ -44,9 +44,9 @@ const ALLOWED_BOOK_STATUSES = new Set([
 ]);
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     bookkey: string;
-  };
+  }>;
 };
 
 type OwnedBook = {
@@ -883,7 +883,7 @@ async function uploadOptionalEpub(params: {
 
 export async function PATCH(request: Request, { params }: RouteContext) {
   try {
-    const bookKey = normalizeBookKey(params.bookkey);
+    const bookKey = normalizeBookKey((await params).bookkey);
 
     if (!bookKey) {
       return jsonError("ID inválido.", 400);

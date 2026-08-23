@@ -28,3 +28,4 @@ _repair_api_route_backups/
 reports/
 preview-test.epub
 *.bak
+.env*
