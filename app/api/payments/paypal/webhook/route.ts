@@ -22,9 +22,11 @@ type Event = {
   };
 };
 
+class WebhookRequestError extends Error {}
+
 function header(request: Request, name: string) {
   const value = request.headers.get(name);
-  if (!value) throw new Error(`Falta el encabezado ${name}.`);
+  if (!value) throw new WebhookRequestError(`Falta el encabezado ${name}.`);
   return value;
 }
 
@@ -91,7 +93,16 @@ async function completePurchase(event: Event) {
 
 export async function POST(request: Request) {
   try {
-    const event = JSON.parse(await request.text()) as Event;
+    let event: Event;
+
+    try {
+      event = JSON.parse(await request.text()) as Event;
+    } catch {
+      return NextResponse.json(
+        { ok: false, error: "JSON de webhook invÃ¡lido." },
+        { status: 400 }
+      );
+    }
 
     const verification = await verifyPayPalWebhookSignature({
       transmissionId: header(request, "paypal-transmission-id"),
@@ -124,6 +135,13 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("paypal-webhook:", error);
+
+    if (error instanceof WebhookRequestError) {
+      return NextResponse.json(
+        { ok: false, error: error.message },
+        { status: 400 }
+      );
+    }
 
     if (error instanceof PayPalApiError) {
       return NextResponse.json(
