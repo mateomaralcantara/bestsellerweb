@@ -146,6 +146,6 @@ comment on function public.consume_paypal_rate_limit(
   integer,
   integer
 ) is
-  'Incrementa atÃ³micamente un lÃ­mite fijo por ruta/actor. Ejecutable solo por service_role.';
+  'Incrementa atómicamente un límite fijo por ruta/actor. Ejecutable solo por service_role.';
 
 commit;

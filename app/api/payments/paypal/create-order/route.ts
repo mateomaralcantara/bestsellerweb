@@ -66,7 +66,7 @@ export async function POST(request: Request) {
         {
           ok: false,
           error:
-            "Demasiadas solicitudes de pago. IntÃ©ntalo nuevamente en unos minutos.",
+            "Demasiadas solicitudes de pago. Inténtalo nuevamente en unos minutos.",
         },
         {
           status: 429,

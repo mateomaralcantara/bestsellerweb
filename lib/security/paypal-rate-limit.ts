@@ -92,14 +92,14 @@ export async function consumePayPalRateLimit({
 
   if (error) {
     throw new Error(
-      `No se pudo validar el lÃ­mite de solicitudes: ${error.message}`
+      `No se pudo validar el límite de solicitudes: ${error.message}`
     );
   }
 
   const row = normalizeRpcRow(data);
 
   if (!row) {
-    throw new Error("Supabase devolviÃ³ un resultado de rate limit invÃ¡lido.");
+    throw new Error("Supabase devolvió un resultado de rate limit inválido.");
   }
 
   return {

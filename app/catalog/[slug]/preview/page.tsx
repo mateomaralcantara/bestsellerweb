@@ -1,4 +1,4 @@
-﻿import { notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import BookReaderClient from "@/app/reader/[slug]/BookReaderClient";
 

@@ -81,7 +81,7 @@ export async function POST(request: Request) {
         {
           ok: false,
           error:
-            "Demasiados intentos de confirmaciÃ³n. IntÃ©ntalo nuevamente en unos minutos.",
+            "Demasiados intentos de confirmación. Inténtalo nuevamente en unos minutos.",
         },
         {
           status: 429,
