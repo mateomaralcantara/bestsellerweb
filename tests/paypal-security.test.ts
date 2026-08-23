@@ -22,7 +22,7 @@ describe("PayPal security", () => {
     const ok = /PAYPAL-TRANSMISSION-ID/i.test(text) || /paypal-transmission-id/i.test(text) || /verifyWebhookSignature/i.test(text) || /verify-webhook-signature/i.test(text);
     expect(ok).toBe(true);
     expect(text).toMatch(/WebhookRequestError/);
-    expect(text).toMatch(/JSON de webhook invÃ¡lido/);
+    expect(text).toMatch(/JSON de webhook inválido/);
     expect(text).toMatch(/status:\s*400/);
   });
 });

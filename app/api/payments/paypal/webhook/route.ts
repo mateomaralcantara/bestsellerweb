@@ -99,7 +99,7 @@ export async function POST(request: Request) {
       event = JSON.parse(await request.text()) as Event;
     } catch {
       return NextResponse.json(
-        { ok: false, error: "JSON de webhook invÃ¡lido." },
+        { ok: false, error: "JSON de webhook inválido." },
         { status: 400 }
       );
     }
