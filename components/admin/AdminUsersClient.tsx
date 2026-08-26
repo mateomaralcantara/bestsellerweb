@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { FormEvent, useMemo, useState } from "react";
 import type { AdminUserRow } from "@/lib/admin/admin-data";
 import { postAdminAction } from "./admin-client";
@@ -135,6 +137,13 @@ export default function AdminUsersClient({
                   ) : null}
                 </div>
               </div>
+
+              <Link
+                href={`/admin/users/${row.id}`}
+                className="rounded-xl bg-violet-700 px-4 py-2 text-sm font-black text-white"
+              >
+                CONTROL 360
+              </Link>
 
               <button
                 disabled={busy !== null}
