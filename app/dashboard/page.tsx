@@ -1,4 +1,5 @@
 import Link from "next/link";
+import DashboardFinanceStrip from "@/components/dashboard/finance/DashboardFinanceStrip";
 import { BookText, LibraryBig, Tags, UserRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import PublishedBookCard from "@/components/dashboard/PublishedBookCard";
@@ -237,6 +238,9 @@ export default async function DashboardPage() {
           value={profile.full_name}
         />
       </div>
+      <DashboardFinanceStrip />
+
+
 
       {purchasesResult.error ? (
         <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">

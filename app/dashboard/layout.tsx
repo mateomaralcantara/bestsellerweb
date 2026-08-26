@@ -9,6 +9,26 @@ const dashboardLinks = [
     description: "Vista general",
   },
   {
+    href: "/dashboard/finance",
+    label: "Finanzas",
+    description: "Beneficios, saldo e histÃ³rico",
+  },
+  {
+    href: "/dashboard/buyer",
+    label: "Comprador",
+    description: "Compras, crÃ©ditos y reembolsos",
+  },
+  {
+    href: "/dashboard/author",
+    label: "Autor",
+    description: "Ventas y regalÃ­as",
+  },
+  {
+    href: "/dashboard/affiliate",
+    label: "Afiliado-vendedor",
+    description: "Comisiones y conversiones",
+  },
+  {
     href: "/dashboard/books/new",
     label: "Nuevo libro",
     description: "Crear ficha editorial",

@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getBookCheckoutItem } from "@/lib/paypal/book-checkout";
 import { createPayPalOrder, PayPalApiError } from "@/lib/paypal/client";
 import { userAlreadyOwnsBook } from "@/lib/paypal/purchases";
+import { normalizeAffiliateCode, resolveAffiliateUserByCode } from "@/lib/finance/record-sale";
 import { buildRateLimitHeaders, consumePayPalRateLimit } from "@/lib/security/paypal-rate-limit";
 
 export const runtime = "nodejs";
@@ -76,14 +78,28 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json().catch(() => null)) as
-      | { bookId?: unknown }
+      | { bookId?: unknown; affiliateCode?: unknown }
       | null;
     const bookId =
       typeof body?.bookId === "string" ? body.bookId.trim() : "";
 
     if (!bookId) return fail("Falta el bookId.", 400);
 
-    if (await userAlreadyOwnsBook({ userId: user.id, bookId })) {
+
+
+    const cookieStore = await cookies();
+    const bodyAffiliateCode =
+      typeof body?.affiliateCode === "string"
+        ? normalizeAffiliateCode(body.affiliateCode)
+        : "";
+    const cookieAffiliateCode = normalizeAffiliateCode(
+      cookieStore.get("libroseller_affiliate")?.value
+    );
+    const affiliateCode = bodyAffiliateCode || cookieAffiliateCode;
+    const affiliateUserId = affiliateCode
+      ? await resolveAffiliateUserByCode(affiliateCode, user.id)
+      : null;
+if (await userAlreadyOwnsBook({ userId: user.id, bookId })) {
       return NextResponse.json(
         {
           ok: false,
@@ -104,6 +120,8 @@ export async function POST(request: Request) {
         status: "creating",
         amount: Number(book.amount),
         currency: book.currency,
+        affiliate_user_id: affiliateUserId,
+        affiliate_code: affiliateUserId ? affiliateCode : null,
       })
       .select("id")
       .single();
@@ -118,7 +136,7 @@ export async function POST(request: Request) {
         bookTitle: book.title,
         amount: book.amount,
         currency: book.currency,
-      });
+});
 
       if (!paypalOrder.id) {
         throw new Error("PayPal no devolvió el identificador de la orden.");

@@ -21,6 +21,7 @@ type LocalOrder = {
   status: string;
   amount: number;
   currency: string;
+  affiliate_user_id: string | null;
 };
 
 function fail(message: string, status: number, details?: unknown) {
@@ -101,7 +102,7 @@ export async function POST(request: Request) {
     const { data, error } = await supabaseAdmin
       .from("paypal_orders")
       .select(
-        "id, user_id, book_id, paypal_order_id, paypal_capture_id, status, amount, currency"
+        "id, user_id, book_id, paypal_order_id, paypal_capture_id, status, amount, currency, affiliate_user_id"
       )
       .eq("paypal_order_id", orderId)
       .eq("user_id", user.id)
@@ -123,6 +124,7 @@ export async function POST(request: Request) {
         currency: localOrder.currency,
         paypalOrderId: localOrder.paypal_order_id,
         paypalCaptureId: localOrder.paypal_capture_id,
+        affiliateUserId: localOrder.affiliate_user_id,
       });
 
       return NextResponse.json({
@@ -197,6 +199,7 @@ export async function POST(request: Request) {
       currency: localOrder.currency,
       paypalOrderId: localOrder.paypal_order_id,
       paypalCaptureId: capture.captureId,
+        affiliateUserId: localOrder.affiliate_user_id,
     });
 
     return NextResponse.json({
