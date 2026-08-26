@@ -7,6 +7,7 @@ import { createPayPalOrder, PayPalApiError } from "@/lib/paypal/client";
 import { userAlreadyOwnsBook } from "@/lib/paypal/purchases";
 import { normalizeAffiliateCode, resolveAffiliateUserByCode } from "@/lib/finance/record-sale";
 import { buildRateLimitHeaders, consumePayPalRateLimit } from "@/lib/security/paypal-rate-limit";
+import { getUserControls } from "@/lib/user-controls";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +55,13 @@ export async function POST(request: Request) {
 
     if (authError || !user) {
       return fail("Debes iniciar sesión para comprar.", 401);
+    }
+    const controls = await getUserControls(user.id);
+    if (controls.purchaseBlocked) {
+      return fail(
+        controls.notes || "Las compras estan bloqueadas temporalmente para esta cuenta.",
+        403
+      );
     }
     const rateLimitMax = 10;
     const rateLimit = await consumePayPalRateLimit({

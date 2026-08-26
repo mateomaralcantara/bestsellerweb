@@ -11,17 +11,17 @@ const dashboardLinks = [
   {
     href: "/dashboard/finance",
     label: "Finanzas",
-    description: "Beneficios, saldo e histÃ³rico",
+    description: "Beneficios, saldo e histórico",
   },
   {
     href: "/dashboard/buyer",
     label: "Comprador",
-    description: "Compras, crÃ©ditos y reembolsos",
+    description: "Compras, créditos y reembolsos",
   },
   {
     href: "/dashboard/author",
     label: "Autor",
-    description: "Ventas y regalÃ­as",
+    description: "Ventas y regalías",
   },
   {
     href: "/dashboard/affiliate",
@@ -81,6 +81,17 @@ export default async function DashboardLayout({
       )
     : dashboardLinks;
 
+  const linksForRender = access.isAdmin
+    ? [
+        {
+          href: "/admin",
+          label: "SUPERADMIN",
+          description: "Control total de LibroSeller",
+        },
+        ...visibleLinks,
+      ]
+    : visibleLinks;
+
   return (
     <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-6">
@@ -105,7 +116,7 @@ export default async function DashboardLayout({
           </p>
 
           <nav className="space-y-2">
-            {visibleLinks.map((item) => (
+            {linksForRender.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

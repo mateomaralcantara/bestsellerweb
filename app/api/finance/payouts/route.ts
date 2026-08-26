@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getUserControls } from "@/lib/user-controls";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,6 +54,13 @@ export async function POST(request: Request) {
     return fail("Debes iniciar sesión.", 401);
   }
 
+  const controls = await getUserControls(user.id);
+  if (controls.payoutBlocked) {
+    return fail(
+      controls.notes || "Los retiros estan bloqueados temporalmente para esta cuenta.",
+      403
+    );
+  }
   const body = (await request.json().catch(() => null)) as
     | {
         amount?: unknown;
