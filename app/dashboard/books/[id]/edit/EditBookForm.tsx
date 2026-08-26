@@ -573,7 +573,7 @@ export default function EditBookForm({ book, edition }: EditBookFormProps) {
 
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
               Modifica los datos que llenaste al subir el libro: título,
-              categoría, precio, SEO, portada, EPUB completo y Preview automático.
+              categoría, precio, SEO, portada, EPUB completo y EPUB de muestra.
             </p>
 
             <p className="mt-2 text-sm text-slate-500">
@@ -1139,6 +1139,12 @@ export default function EditBookForm({ book, edition }: EditBookFormProps) {
             </div>
           ) : null}
 
+          <div className="mb-5 rounded-3xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-900">
+            Puedes actualizar únicamente los datos de publicación sin volver a
+            subir archivos. Si seleccionas un EPUB nuevo, solo se reemplaza ese
+            asset: completo o muestra.
+          </div>
+
           <div className="grid gap-5 md:grid-cols-3">
             <label className={labelClassName}>
               <span>Cambiar portada</span>
@@ -1149,19 +1155,37 @@ export default function EditBookForm({ book, edition }: EditBookFormProps) {
                 disabled={isSubmitting}
                 className={inputClassName}
               />
-              <FieldHint>JPG, PNG o WebP. Máximo 10 MB.</FieldHint>
+              <FieldHint>
+                Opcional. JPG, PNG o WebP. Máximo 10 MB.
+              </FieldHint>
             </label>
 
             <label className={labelClassName}>
-              <span>Cambiar PDF principal</span>
+              <span>Cambiar EPUB completo</span>
               <input
-                name="manuscript_pdf"
+                name="epub_file"
                 type="file"
-                accept="application/pdf,.pdf"
+                accept="application/epub+zip,.epub"
                 disabled={isSubmitting}
                 className={inputClassName}
               />
-              <FieldHint>Archivo completo. Solo dueño o comprador.</FieldHint>
+              <FieldHint>
+                Opcional. Reemplaza solo el libro completo privado.
+              </FieldHint>
+            </label>
+
+            <label className={labelClassName}>
+              <span>Cambiar EPUB de muestra</span>
+              <input
+                name="preview_epub"
+                type="file"
+                accept="application/epub+zip,.epub"
+                disabled={isSubmitting}
+                className={inputClassName}
+              />
+              <FieldHint>
+                Opcional. Reemplaza solo la muestra EPUB del catálogo.
+              </FieldHint>
             </label>
           </div>
 
@@ -1170,14 +1194,14 @@ export default function EditBookForm({ book, edition }: EditBookFormProps) {
             <textarea
               name="change_note"
               rows={3}
-              placeholder="Ej: actualicé portada, corregí metadata, subí nuevo Preview automático..."
+              placeholder="Ej: corregí metadata, actualicé portada, reemplacé EPUB completo o EPUB de muestra..."
               disabled={isSubmitting}
               className={inputClassName}
             />
           </label>
         </section>
 
-        <div className="flex flex-wrap gap-3">
+<div className="flex flex-wrap gap-3">
           <button
             type="submit"
             disabled={isSubmitting}

@@ -21,15 +21,12 @@ const PREVIEW_BUCKET = "book-previews";
 const PREVIEW_PAGE_COUNT = 25;
 
 const MAX_COVER_SIZE_MB = 10;
-const MAX_PDF_SIZE_MB = 250;
 const MAX_EPUB_SIZE_MB = 100;
 
 const MAX_COVER_SIZE_BYTES = MAX_COVER_SIZE_MB * 1024 * 1024;
-const MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
 const MAX_EPUB_SIZE_BYTES = MAX_EPUB_SIZE_MB * 1024 * 1024;
 
 const ALLOWED_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
-const ALLOWED_PDF_EXTENSIONS = new Set(["pdf"]);
 const ALLOWED_EPUB_EXTENSIONS = new Set(["epub"]);
 
 const ALLOWED_BOOK_STATUSES = new Set([
@@ -62,12 +59,11 @@ type EditionRow = {
   id: string;
 };
 
-type AssetType = "cover" | "manuscript_pdf" | "epub" | "epub_preview";
+type AssetType = "cover" | "epub" | "epub_preview";
 
 type RevisionType =
   | "metadata_update"
   | "cover_update"
-  | "manuscript_update"
   | "epub_update"
   | "preview_update";
 
@@ -273,19 +269,6 @@ function isValidImageFile(file: File) {
     file.type === "application/octet-stream";
 
   const validExt = ALLOWED_IMAGE_EXTENSIONS.has(ext);
-
-  return validMime && validExt;
-}
-
-function isValidPdfFile(file: File) {
-  const ext = getFileExtension(file, "pdf");
-
-  const validMime =
-    !file.type ||
-    file.type === "application/pdf" ||
-    file.type === "application/octet-stream";
-
-  const validExt = ALLOWED_PDF_EXTENSIONS.has(ext);
 
   return validMime && validExt;
 }
@@ -696,16 +679,6 @@ function validateCoverFile(file: File) {
   }
 }
 
-function validatePdfFile(file: File) {
-  if (file.size > MAX_PDF_SIZE_BYTES) {
-    throw new Error(`El PDF no debe superar ${MAX_PDF_SIZE_MB} MB.`);
-  }
-
-  if (!isValidPdfFile(file)) {
-    throw new Error("El manuscrito principal debe ser un archivo PDF.");
-  }
-}
-
 function validateEpubFile(file: File) {
   if (file.size > MAX_EPUB_SIZE_BYTES) {
     throw new Error(`El EPUB no debe superar ${MAX_EPUB_SIZE_MB} MB.`);
@@ -774,67 +747,7 @@ async function uploadCover(params: {
   });
 }
 
-async function uploadManuscriptPdf(params: {
-  book: OwnedBook;
-  editionId: string;
-  userId: string;
-  changeNote: string | null;
-  pdf: File;
-}) {
-  validatePdfFile(params.pdf);
-
-  const pdfPath = `manuscripts/${params.book.slug}-${randomUUID()}.pdf`;
-
-  await uploadFile({
-    bucket: FILE_BUCKET,
-    storagePath: pdfPath,
-    file: params.pdf,
-  });
-
-  await replaceAsset({
-    bookId: params.book.id,
-    editionId: params.editionId,
-    assetType: "manuscript_pdf",
-    replaceAssetTypes: ["manuscript_pdf", "pdf"],
-    bucket: FILE_BUCKET,
-    storagePath: pdfPath,
-    fileUrl: null,
-    mimeType: params.pdf.type || "application/pdf",
-    isPublic: false,
-    sortOrder: 1,
-    fileName: safeStorageName(params.pdf.name),
-    fileSize: params.pdf.size,
-  });
-
-  await updateWithColumnFallback({
-    table: "book_editions",
-    eqColumn: "id",
-    eqValue: params.editionId,
-    payload: {
-      file_url: null,
-      format: "ebook",
-      updated_at: new Date().toISOString(),
-    },
-  });
-
-  await markPreviewPendingFromPdf(params.book);
-
-  await tryInsertRevision({
-    bookId: params.book.id,
-    editionId: params.editionId,
-    userId: params.userId,
-    revisionType: "manuscript_update",
-    changeNote: params.changeNote,
-    bucket: FILE_BUCKET,
-    storagePath: pdfPath,
-    fileName: params.pdf.name,
-    mimeType: params.pdf.type || "application/pdf",
-  });
-
-  return pdfPath;
-}
-
-async function uploadOptionalEpub(params: {
+async function uploadFullEpub(params: {
   book: OwnedBook;
   editionId: string;
   userId: string;
@@ -843,7 +756,7 @@ async function uploadOptionalEpub(params: {
 }) {
   validateEpubFile(params.epub);
 
-  const epubPath = `epubs/${params.book.slug}-${randomUUID()}.epub`;
+  const epubPath = `books/${params.book.id}/full/${params.book.slug}-${randomUUID()}.epub`;
 
   await uploadFile({
     bucket: FILE_BUCKET,
@@ -879,6 +792,66 @@ async function uploadOptionalEpub(params: {
   });
 
   return epubPath;
+}
+
+async function uploadPreviewEpub(params: {
+  book: OwnedBook;
+  userId: string;
+  changeNote: string | null;
+  epub: File;
+}) {
+  validateEpubFile(params.epub);
+
+  const previewPath =
+    `books/${params.book.id}/preview/${params.book.slug}-${randomUUID()}.epub`;
+
+  await uploadFile({
+    bucket: FILE_BUCKET,
+    storagePath: previewPath,
+    file: params.epub,
+  });
+
+  await replaceAsset({
+    bookId: params.book.id,
+    editionId: null,
+    assetType: "epub_preview",
+    replaceAssetTypes: ["epub_preview"],
+    bucket: FILE_BUCKET,
+    storagePath: previewPath,
+    fileUrl: null,
+    mimeType: params.epub.type || "application/epub+zip",
+    isPublic: false,
+    sortOrder: 3,
+    fileName: safeStorageName(params.epub.name),
+    fileSize: params.epub.size,
+  });
+
+  await updateWithColumnFallback({
+    table: "books",
+    eqColumn: "id",
+    eqValue: params.book.id,
+    payload: {
+      preview_mode: "epub_preview",
+      preview_status: "ready",
+      preview_error: null,
+      preview_generated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+  });
+
+  await tryInsertRevision({
+    bookId: params.book.id,
+    editionId: null,
+    userId: params.userId,
+    revisionType: "preview_update",
+    changeNote: params.changeNote,
+    bucket: FILE_BUCKET,
+    storagePath: previewPath,
+    fileName: params.epub.name,
+    mimeType: params.epub.type || "application/epub+zip",
+  });
+
+  return previewPath;
 }
 
 export async function PATCH(request: Request, { params }: RouteContext) {
@@ -1008,17 +981,12 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     const changeNote = nullableText(formData, "change_note");
 
     const cover = getFileField(formData, ["cover"]);
-    const manuscriptPdf = getFileField(formData, [
-      "manuscript_pdf",
-      "pdf_file",
-      "book_pdf",
-      "book_file",
-    ]);
-    const optionalEpub = getFileField(formData, ["epub_file", "epub"]);
+    const fullEpub = getFileField(formData, ["epub_file", "epub"]);
+    const previewEpub = getFileField(formData, ["preview_epub"]);
 
     let changedCover = false;
-    let changedManuscriptPdf = false;
     let changedEpub = false;
+    let changedPreviewEpub = false;
 
     if (cover) {
       await uploadCover({
@@ -1032,31 +1000,30 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       changedCover = true;
     }
 
-    if (manuscriptPdf) {
-      await uploadManuscriptPdf({
+    if (fullEpub) {
+      await uploadFullEpub({
         book,
         editionId,
         userId: user.id,
         changeNote,
-        pdf: manuscriptPdf,
-      });
-
-      changedManuscriptPdf = true;
-    }
-
-    if (optionalEpub) {
-      await uploadOptionalEpub({
-        book,
-        editionId,
-        userId: user.id,
-        changeNote,
-        epub: optionalEpub,
+        epub: fullEpub,
       });
 
       changedEpub = true;
     }
 
-    if (!changedCover && !changedManuscriptPdf && !changedEpub) {
+    if (previewEpub) {
+      await uploadPreviewEpub({
+        book,
+        userId: user.id,
+        changeNote,
+        epub: previewEpub,
+      });
+
+      changedPreviewEpub = true;
+    }
+
+    if (!changedCover && !changedEpub && !changedPreviewEpub) {
       await tryInsertRevision({
         bookId: book.id,
         editionId,
@@ -1069,11 +1036,11 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         mimeType: null,
       });
     }
-
     return jsonOk({
-      message: changedManuscriptPdf
-        ? "Libro actualizado correctamente. El fragmento quedó pendiente para generarse desde el PDF."
-        : "Libro actualizado correctamente.",
+      message:
+        changedEpub || changedPreviewEpub
+          ? "Datos de publicación y archivos EPUB actualizados correctamente."
+          : "Datos de publicación actualizados correctamente.",
       book: {
         id: book.id,
         slug: book.slug,
@@ -1083,19 +1050,16 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       updated: {
         metadata: true,
         cover: changedCover,
-        manuscript_pdf: changedManuscriptPdf,
         epub: changedEpub,
+        epub_preview: changedPreviewEpub,
       },
       preview: {
-        mode: changedManuscriptPdf ? "pdf_images" : null,
-        status: changedManuscriptPdf ? "pending" : null,
-        needsRegeneration: changedManuscriptPdf,
-        command: changedManuscriptPdf
-          ? `npm run preview:book -- --slug ${book.slug} --pages ${PREVIEW_PAGE_COUNT} --scale 5200`
-          : null,
+        mode: changedPreviewEpub ? "epub_preview" : null,
+        status: changedPreviewEpub ? "ready" : null,
+        needsRegeneration: false,
+        command: null,
       },
-    });
-  } catch (error) {
+    });  } catch (error) {
     console.error("PATCH /api/books/[bookkey] error:", error);
 
     return jsonError(getErrorMessage(error), 500);
