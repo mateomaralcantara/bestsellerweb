@@ -538,6 +538,194 @@ async function setFinanceSummary(userId: string, body: Body) {
   });
 }
 
+
+function normalizeProfileSlug(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120);
+}
+
+function normalizeAffiliateCode(value: string) {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, "")
+    .slice(0, 64);
+}
+
+async function upsertAuthorProfile(userId: string, body: Body) {
+  const actor = await requireAdminApi("authors.manage");
+  const why = reason(body);
+
+  await userOr404(userId);
+
+  const displayName = text(body, "displayName");
+  const penName = text(body, "penName");
+  const slug = normalizeProfileSlug(text(body, "slug"));
+  const status = text(body, "status");
+  const rejectionReason = text(body, "rejectionReason");
+
+  if (!displayName || !slug) {
+    throw new AdminAccessError(
+      "Nombre publico y slug del autor son obligatorios.",
+      400
+    );
+  }
+
+  if (!["pending", "approved", "rejected", "suspended"].includes(status)) {
+    throw new AdminAccessError("Estado de autor invalido.", 400);
+  }
+
+  const before = await supabaseAdmin
+    .from("author_profiles")
+    .select("*")
+    .or(`id.eq.${userId},user_id.eq.${userId}`)
+    .limit(1)
+    .maybeSingle();
+
+  if (before.error) throw new Error(before.error.message);
+
+  const payload = {
+    user_id: userId,
+    slug,
+    display_name: displayName,
+    pen_name: penName || null,
+    approval_status: status,
+    rejection_reason:
+      status === "rejected" || status === "suspended"
+        ? rejectionReason || null
+        : null,
+  };
+
+  if (before.data) {
+    const update = await supabaseAdmin
+      .from("author_profiles")
+      .update(payload)
+      .eq("id", before.data.id);
+
+    if (update.error) throw new Error(update.error.message);
+  } else {
+    const insert = await supabaseAdmin.from("author_profiles").insert({
+      id: userId,
+      ...payload,
+    });
+
+    if (insert.error) throw new Error(insert.error.message);
+  }
+
+  const roleResult = await supabaseAdmin
+    .from("user_roles")
+    .upsert(
+      {
+        user_id: userId,
+        role: "author",
+      },
+      { onConflict: "user_id,role" }
+    );
+
+  if (roleResult.error) throw new Error(roleResult.error.message);
+
+  await writeAdminAudit({
+    actor,
+    action: "author.profile.upsert",
+    module: "authors",
+    targetType: "user",
+    targetId: userId,
+    reason: why,
+    before: before.data ?? null,
+    after: payload,
+  });
+
+  return ok();
+}
+
+async function upsertAffiliateProfile(userId: string, body: Body) {
+  const actor = await requireAdminApi("affiliates.manage");
+  const why = reason(body);
+
+  await userOr404(userId);
+
+  const displayName = text(body, "displayName");
+  const handle = text(body, "handle");
+  const referralCode = normalizeAffiliateCode(text(body, "referralCode"));
+  const commissionRatePct = numeric(body, "commissionRatePct");
+  const status = text(body, "status");
+
+  if (referralCode.length < 4) {
+    throw new AdminAccessError(
+      "El codigo de afiliado debe tener al menos 4 caracteres.",
+      400
+    );
+  }
+
+  if (
+    commissionRatePct === null ||
+    commissionRatePct < 0 ||
+    commissionRatePct > 100
+  ) {
+    throw new AdminAccessError("Comision de afiliado invalida.", 400);
+  }
+
+  if (!["pending", "approved", "rejected"].includes(status)) {
+    throw new AdminAccessError("Estado de afiliado invalido.", 400);
+  }
+
+  const before = await supabaseAdmin
+    .from("affiliate_profiles")
+    .select("*")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (before.error) throw new Error(before.error.message);
+
+  const payload = {
+    id: userId,
+    display_name: displayName || null,
+    handle: handle || null,
+    referral_code: referralCode,
+    code: referralCode,
+    commission_rate: commissionRatePct,
+    commission_rate_override: commissionRatePct / 100,
+    status,
+    approved_at: status === "approved" ? new Date().toISOString() : null,
+    updated_at: new Date().toISOString(),
+  };
+
+  const upsert = await supabaseAdmin
+    .from("affiliate_profiles")
+    .upsert(payload, { onConflict: "id" });
+
+  if (upsert.error) throw new Error(upsert.error.message);
+
+  const roleResult = await supabaseAdmin
+    .from("user_roles")
+    .upsert(
+      {
+        user_id: userId,
+        role: "affiliate",
+      },
+      { onConflict: "user_id,role" }
+    );
+
+  if (roleResult.error) throw new Error(roleResult.error.message);
+
+  await writeAdminAudit({
+    actor,
+    action: "affiliate.profile.upsert",
+    module: "affiliates",
+    targetType: "user",
+    targetId: userId,
+    reason: why,
+    before: before.data ?? null,
+    after: payload,
+  });
+
+  return ok();
+}
+
 export async function POST(request: Request, context: Context) {
   try {
     const { id } = await context.params;
@@ -557,6 +745,10 @@ export async function POST(request: Request, context: Context) {
         return await updateMetadata(id, body);
       case "purchase.access":
         return await purchaseAccess(id, body);
+      case "author.profile.upsert":
+        return await upsertAuthorProfile(id, body);
+      case "affiliate.profile.upsert":
+        return await upsertAffiliateProfile(id, body);
       case "finance.summary.set":
         return await setFinanceSummary(id, body);
       default:
