@@ -40,6 +40,7 @@ type DraftValue = string | boolean;
 const DRAFT_KEY = "dashboard:new-book:draft:v4";
 const MAX_COVER_SIZE_MB = 10;
 const MAX_BOOK_SIZE_MB = 100;
+const MAX_PREVIEW_SIZE_MB = 50;
 
 const NICHES = [
   "Negocios y emprendimiento",
@@ -352,23 +353,23 @@ function isValidImageFile(file: File) {
 }
 
 
-function isPdfFile(file: FormDataEntryValue | null) {
+function isEpubFile(file: FormDataEntryValue | null) {
   if (!(file instanceof File)) {
     return false;
   }
 
   const fileName = file.name.toLowerCase();
+  const validMime =
+    !file.type ||
+    file.type === "application/epub+zip" ||
+    file.type === "application/octet-stream";
 
-  return (
-    file.type === "application/pdf" ||
-    fileName.endsWith(".pdf")
-  );
+  return validMime && fileName.endsWith(".epub");
 }
-
 function validateFiles(formData: FormData) {
   const cover = formData.get("cover");
-  const manuscriptPdf = formData.get("manuscript_pdf");
-  // Preview automático: se genera desde el PDF principal.
+  const epubFile = formData.get("epub_file");
+  const previewEpub = formData.get("preview_epub");
 
   if (!isRealFile(cover)) {
     return "La portada es obligatoria.";
@@ -382,21 +383,32 @@ function validateFiles(formData: FormData) {
     return `La portada no debe superar ${MAX_COVER_SIZE_MB} MB.`;
   }
 
-  if (!isRealFile(manuscriptPdf)) {
-    return "El PDF principal es obligatorio.";
+  if (!isRealFile(epubFile)) {
+    return "El EPUB completo es obligatorio.";
   }
 
-  if (!isPdfFile(manuscriptPdf)) {
-    return "El archivo principal debe ser PDF.";
+  if (!isEpubFile(epubFile)) {
+    return "El libro completo debe ser un archivo EPUB válido (.epub).";
   }
 
-  if (sizeInMb(manuscriptPdf) > MAX_BOOK_SIZE_MB) {
-    return `El PDF principal no debe superar ${MAX_BOOK_SIZE_MB} MB.`;
+  if (sizeInMb(epubFile) > MAX_BOOK_SIZE_MB) {
+    return `El EPUB completo no debe superar ${MAX_BOOK_SIZE_MB} MB.`;
+  }
+
+  if (!isRealFile(previewEpub)) {
+    return "El EPUB de muestra es obligatorio.";
+  }
+
+  if (!isEpubFile(previewEpub)) {
+    return "La muestra debe ser un archivo EPUB válido (.epub).";
+  }
+
+  if (sizeInMb(previewEpub) > MAX_PREVIEW_SIZE_MB) {
+    return `El EPUB de muestra no debe superar ${MAX_PREVIEW_SIZE_MB} MB.`;
   }
 
   return null;
 }
-
 function collectDraft(form: HTMLFormElement) {
   const draft: Record<string, DraftValue> = {};
 
@@ -712,7 +724,7 @@ export default function NewBookForm() {
     setIsSubmitting(true);
     setStatus({
       type: "info",
-      message: "Guardando portada, PDF principal y metadata...",
+      message: "Guardando portada, EPUB completo, EPUB de muestra y metadata...",
     });
 
     try {
@@ -751,7 +763,7 @@ export default function NewBookForm() {
         type: "success",
         message:
           data.message ||
-          "Libro creado correctamente con PDF principal.",
+          "Libro creado correctamente con EPUB completo y EPUB de muestra.",
       });
 
       form.reset();
@@ -785,7 +797,7 @@ export default function NewBookForm() {
             </h1>
 
             <p className="max-w-3xl text-sm leading-6 text-slate-600">
-              Crea la ficha, sube la portada y el PDF principal. La plataforma
+              Crea la ficha, sube la portada, el EPUB completo y el EPUB de muestra. La plataforma
               preparará una muestra protegida de las primeras 25 páginas sin
               entregar el archivo completo.
             </p>
@@ -826,7 +838,7 @@ export default function NewBookForm() {
         className="space-y-6"
         noValidate
       >
-        <input type="hidden" name="preview_mode" value="pdf_images" />
+        <input type="hidden" name="preview_mode" value="epub_preview" />
         <input type="hidden" name="preview_page_count" value="25" />
         <input type="hidden" name="preview_include_cover" value="false" />
         <input type="hidden" name="preview_layout" value="epub_reader" />
@@ -1083,41 +1095,39 @@ export default function NewBookForm() {
         </section>
 
         <section className={sectionClassName}>
-          <h2 className={sectionTitleClassName}>Vista previa de 25 páginas</h2>
+          <h2 className={sectionTitleClassName}>Vista previa EPUB</h2>
 
           <div className="grid gap-4 md:grid-cols-4">
             <PreviewInfoCard
-              title="Muestra"
-              value="25 páginas"
-              text="Se genera desde el PDF principal."
+              title="Formato"
+              value="EPUB"
+              text="La muestra se recibe como archivo EPUB independiente."
             />
-
             <PreviewInfoCard
               title="Completo"
-              value="PDF privado"
-              text="Solo dueño o comprador."
+              value="EPUB privado"
+              text="Solo dueño o comprador autorizado."
             />
-
             <PreviewInfoCard
-              title="Lector"
-              value="Interno"
-              text="Lectura dentro de la plataforma."
+              title="Muestra"
+              value="EPUB separado"
+              text="No expone ni recorta el archivo completo."
             />
-
             <PreviewInfoCard
               title="Seguridad"
-              value="Backend protegido"
-              text="El archivo no queda público."
+              value="Storage privado"
+              text="Los dos archivos quedan registrados como assets distintos."
             />
           </div>
 
           <div className="mt-4 rounded-3xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-900">
-            La muestra queda fijada en las primeras 25 páginas. El PDF completo
-            continúa privado y solo se habilita después de la compra.
+            El EPUB completo y el EPUB de muestra son archivos distintos. La
+            muestra puede abrirse desde el catálogo; el EPUB completo requiere
+            propietario o compra válida.
           </div>
         </section>
 
-        <section className={sectionClassName}>
+<section className={sectionClassName}>
           <h2 className={sectionTitleClassName}>Precio y venta</h2>
 
           <div className="grid gap-5 md:grid-cols-3">
@@ -1386,21 +1396,43 @@ export default function NewBookForm() {
             </label>
 
             <label className={labelClassName}>
-              <span>PDF principal *</span>
+              <span>EPUB completo *</span>
               <input
-                name="manuscript_pdf"
+                name="epub_file"
                 type="file"
-                accept="application/pdf,.pdf"
+                accept="application/epub+zip,.epub"
                 required
                 disabled={isSubmitting}
                 className={inputClassName}
               />
-              <FieldHint>Archivo completo. Solo dueño o comprador.</FieldHint>
+              <FieldHint>
+                Libro íntegro. Máximo {MAX_BOOK_SIZE_MB} MB. Se guarda privado.
+              </FieldHint>
             </label>
+
+            <label className={labelClassName}>
+              <span>EPUB de muestra *</span>
+              <input
+                name="preview_epub"
+                type="file"
+                accept="application/epub+zip,.epub"
+                required
+                disabled={isSubmitting}
+                className={inputClassName}
+              />
+              <FieldHint>
+                Muestra independiente. Máximo {MAX_PREVIEW_SIZE_MB} MB.
+              </FieldHint>
+            </label>
+          </div>
+
+          <div className="mt-4 rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">
+            Arquitectura EPUB nativa: un archivo completo privado y un EPUB de
+            muestra independiente. No se genera la muestra desde un PDF.
           </div>
         </section>
 
-        <div className="sticky bottom-4 z-10 rounded-[28px] border border-slate-200 bg-white/95 p-4 shadow-2xl shadow-slate-950/10 backdrop-blur">
+<div className="sticky bottom-4 z-10 rounded-[28px] border border-slate-200 bg-white/95 p-4 shadow-2xl shadow-slate-950/10 backdrop-blur">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <StatusMessage status={status} />
 

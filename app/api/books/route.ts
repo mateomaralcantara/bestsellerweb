@@ -19,11 +19,13 @@ const PREVIEW_PAGE_COUNT = 25;
 
 const MAX_COVER_SIZE_MB = 10;
 const MAX_BOOK_SIZE_MB = 100;
+const MAX_PREVIEW_SIZE_MB = 50;
 const MAX_COVER_SIZE_BYTES = MAX_COVER_SIZE_MB * 1024 * 1024;
 const MAX_BOOK_SIZE_BYTES = MAX_BOOK_SIZE_MB * 1024 * 1024;
+const MAX_PREVIEW_SIZE_BYTES = MAX_PREVIEW_SIZE_MB * 1024 * 1024;
 
 const ALLOWED_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
-const ALLOWED_BOOK_EXTENSIONS = new Set(["pdf", "epub"]);
+const ALLOWED_BOOK_EXTENSIONS = new Set(["epub"]);
 
 const ALLOWED_CREATE_STATUSES = new Set(["draft", "under_review"]);
 
@@ -232,7 +234,7 @@ function parsePreviewMode(formData: FormData): PreviewMode {
     return raw;
   }
 
-  return "pdf_images";
+  return "epub_preview";
 }
 
 function requireFileField(formData: FormData, key: string): File | null {
@@ -636,12 +638,9 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
 
   const cover = requireFileField(formData, "cover");
   const bookFile =
-    requireFileField(formData, "manuscript_pdf") ||
-    requireFileField(formData, "pdf_file") ||
-    requireFileField(formData, "book_pdf") ||
+    requireFileField(formData, "epub_file") ||
     requireFileField(formData, "book_file");
-  const previewEpub: File | null = null;
-
+  const previewEpub = requireFileField(formData, "preview_epub");
   if (!title) throw new Error("El título es obligatorio");
 
   if (paypalPrice !== null && paypalPrice <= 0) {
@@ -665,7 +664,8 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
   }
 
   if (!cover) throw new Error("La portada es obligatoria");
-  if (!bookFile) throw new Error("El archivo completo del libro es obligatorio");
+  if (!bookFile) throw new Error("El EPUB completo es obligatorio");
+  if (!previewEpub) throw new Error("El EPUB de muestra es obligatorio");
 
   if (cover.size > MAX_COVER_SIZE_BYTES) {
     throw new Error(`La portada no debe superar ${MAX_COVER_SIZE_MB} MB`);
@@ -673,7 +673,13 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
 
   if (bookFile.size > MAX_BOOK_SIZE_BYTES) {
     throw new Error(
-      `El PDF principal no debe superar ${MAX_BOOK_SIZE_MB} MB`
+      `El EPUB completo no debe superar ${MAX_BOOK_SIZE_MB} MB`
+    );
+  }
+
+  if (previewEpub.size > MAX_PREVIEW_SIZE_BYTES) {
+    throw new Error(
+      `El EPUB de muestra no debe superar ${MAX_PREVIEW_SIZE_MB} MB`
     );
   }
 
@@ -681,14 +687,13 @@ function parseAndValidateForm(formData: FormData): UploadBookForm {
     throw new Error("La portada debe ser JPG, PNG o WebP");
   }
 
-  if (!isAllowedBookFile(bookFile)) {
-    throw new Error("El archivo completo del libro debe ser PDF o EPUB");
-  }
-  if (getBookAssetType(bookFile) === "epub") {
-    throw new Error("El manuscrito principal debe ser PDF. El EPUB queda como formato opcional separado.");
+  if (!isAllowedBookFile(bookFile) || !isEpubFile(bookFile)) {
+    throw new Error("El archivo completo del libro debe ser EPUB");
   }
 
-  // Preview EPUB eliminado: el preview se genera automáticamente desde el PDF principal.
+  if (!isAllowedBookFile(previewEpub) || !isEpubFile(previewEpub)) {
+    throw new Error("El archivo de muestra debe ser EPUB");
+  }
   if (
     affiliateCommissionPercentage !== null &&
     affiliateCommissionPercentage > 100
