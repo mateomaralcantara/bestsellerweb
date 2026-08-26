@@ -43,10 +43,10 @@ export default function FinanceSummaryCards({ summaries, mode="all" }: {
     const c = s.currency;
     if (mode === "author") return (
       <div key={c} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card label="RegalÃ­as generadas" value={money(s.author_earnings_total,c)} />
+        <Card label="Regalías generadas" value={money(s.author_earnings_total,c)} />
         <Card label="Disponible" value={money(s.author_available,c)} />
         <Card label="Pendiente" value={money(s.author_pending,c)} />
-        <Card label="Retirado histÃ³rico" value={money(s.paid_out_total,c)} />
+        <Card label="Total retirado" value={money(s.paid_out_total,c)} />
       </div>
     );
     if (mode === "affiliate") return (
@@ -54,25 +54,25 @@ export default function FinanceSummaryCards({ summaries, mode="all" }: {
         <Card label="Comisiones generadas" value={money(s.affiliate_earnings_total,c)} />
         <Card label="Disponible" value={money(s.affiliate_available,c)} />
         <Card label="Pendiente" value={money(s.affiliate_pending,c)} />
-        <Card label="Retirado histÃ³rico" value={money(s.paid_out_total,c)} />
+        <Card label="Total retirado" value={money(s.paid_out_total,c)} />
       </div>
     );
     if (mode === "buyer") return (
       <div key={c} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card label="Compras netas" value={money(s.buyer_net_spend,c)} />
-        <Card label="Beneficios comprador" value={money(s.buyer_benefits_total,c)} />
+        <Card label="Beneficios del comprador" value={money(s.buyer_benefits_total,c)} />
         <Card label="Reembolsos" value={money(s.refunds_total,c)} />
-        <Card label="CrÃ©ditos y descuentos" value={money(s.credits_discounts_total,c)} />
+        <Card label="Créditos y descuentos" value={money(s.credits_discounts_total,c)} />
       </div>
     );
     return (
       <div key={c} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <Card label="Beneficios acumulados" value={money(s.benefits_total,c)} note="RegalÃ­as + comisiones + crÃ©ditos + reembolsos." />
+        <Card label="Beneficios acumulados" value={money(s.benefits_total,c)} note="Regalías + comisiones + créditos + reembolsos." />
         <Card label="Disponible para retirar" value={money(s.available_to_withdraw,c)} />
         <Card label="Ganancias pendientes" value={money(s.pending_earnings,c)} />
-        <Card label="RegalÃ­as de autor" value={money(s.author_earnings_total,c)} />
-        <Card label="Comisiones afiliado" value={money(s.affiliate_earnings_total,c)} />
-        <Card label="Retirado histÃ³rico" value={money(s.paid_out_total,c)} />
+        <Card label="Regalías de autor" value={money(s.author_earnings_total,c)} />
+        <Card label="Comisiones de afiliado" value={money(s.affiliate_earnings_total,c)} />
+        <Card label="Total retirado" value={money(s.paid_out_total,c)} />
       </div>
     );
   })}</div>;

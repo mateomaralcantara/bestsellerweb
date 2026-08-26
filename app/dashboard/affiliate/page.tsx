@@ -35,7 +35,7 @@ export default async function AffiliateFinancePage() {
       {approved ? (
         <div className="mt-7 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
           <p className="font-black text-emerald-950">
-            CÃ³digo: {affiliate.code}
+            Código: {affiliate.code}
           </p>
           <p className="mt-2 break-all text-sm text-emerald-900">
             Enlace: {origin}/r/{affiliate.code}
@@ -59,7 +59,7 @@ export default async function AffiliateFinancePage() {
         </div>
       ) : pending ? (
         <div className="mt-7 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950">
-          <p className="font-black">Solicitud de afiliaciÃ³n pendiente</p>
+          <p className="font-black">Solicitud de afiliación pendiente</p>
           <p className="mt-2">
             Tu cuenta debe ser aprobada antes de generar comisiones o solicitar
             retiros como afiliado.
@@ -67,7 +67,7 @@ export default async function AffiliateFinancePage() {
         </div>
       ) : rejected ? (
         <div className="mt-7 rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-950">
-          <p className="font-black">Solicitud de afiliaciÃ³n no aprobada</p>
+          <p className="font-black">Solicitud de afiliación no aprobada</p>
           <p className="mt-2">
             Puedes revisar el programa de afiliados y presentar una nueva
             solicitud cuando corresponda.
@@ -83,14 +83,14 @@ export default async function AffiliateFinancePage() {
         <div className="mt-7 rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm text-blue-950">
           <p className="font-black">Solicita acceso al programa de afiliados</p>
           <p className="mt-2">
-            Las cuentas de afiliado requieren revisiÃ³n y aprobaciÃ³n antes de
-            habilitar cÃ³digos, comisiones y retiros.
+            Las cuentas de afiliado requieren revisión y aprobación antes de
+            habilitar códigos, comisiones y retiros.
           </p>
           <Link
             href="/affiliates"
             className="mt-4 inline-flex rounded-xl bg-slate-950 px-4 py-2 font-bold text-white"
           >
-            Solicitar afiliaciÃ³n
+            Solicitar afiliación
           </Link>
         </div>
       )}
@@ -107,7 +107,7 @@ export default async function AffiliateFinancePage() {
 
       <section className="mt-8">
         <h3 className="mb-4 text-xl font-black text-slate-950">
-          HistÃ³rico de comisiones
+          Historial de comisiones
         </h3>
         <FinanceHistory rows={data.ledger} />
       </section>

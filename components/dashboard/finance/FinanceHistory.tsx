@@ -10,12 +10,12 @@ function money(value: number, currency: string) {
 
 const labels: Record<FinanceLedgerRow["event_type"], string> = {
   purchase: "Compra",
-  author_royalty: "RegalÃ­a autor",
-  affiliate_commission: "ComisiÃ³n afiliado",
-  platform_fee: "ComisiÃ³n plataforma",
-  payment_fee: "ComisiÃ³n de pago",
+  author_royalty: "Regalía de autor",
+  affiliate_commission: "Comisión de afiliado",
+  platform_fee: "Comisión de plataforma",
+  payment_fee: "Comisión de pago",
   discount: "Descuento",
-  credit: "CrÃ©dito",
+  credit: "Crédito",
   refund: "Reembolso",
   reversal: "Reverso",
   payout: "Retiro",
@@ -25,7 +25,7 @@ const labels: Record<FinanceLedgerRow["event_type"], string> = {
 export default function FinanceHistory({ rows }: { rows: FinanceLedgerRow[] }) {
   if (rows.length === 0) return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
-      TodavÃ­a no hay movimientos financieros para esta cuenta.
+      Todavía no hay movimientos financieros para esta cuenta.
     </div>
   );
 
@@ -34,7 +34,7 @@ export default function FinanceHistory({ rows }: { rows: FinanceLedgerRow[] }) {
       <table className="min-w-full divide-y divide-slate-200 text-sm">
         <thead className="bg-slate-50"><tr>
           <th className="px-4 py-3 text-left font-bold text-slate-600">Fecha</th>
-          <th className="px-4 py-3 text-left font-bold text-slate-600">OperaciÃ³n</th>
+          <th className="px-4 py-3 text-left font-bold text-slate-600">Operación</th>
           <th className="px-4 py-3 text-left font-bold text-slate-600">Rol</th>
           <th className="px-4 py-3 text-left font-bold text-slate-600">Detalle</th>
           <th className="px-4 py-3 text-right font-bold text-slate-600">Monto</th>

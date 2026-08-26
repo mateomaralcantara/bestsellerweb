@@ -27,7 +27,7 @@ export default async function DashboardFinanceStrip() {
             Centro financiero
           </p>
           <h2 className="mt-2 text-2xl font-black text-slate-950">
-            Beneficios e hist&oacute;rico
+            Resumen e historial financiero
           </h2>
         </div>
 

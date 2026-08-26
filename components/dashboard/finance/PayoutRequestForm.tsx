@@ -10,7 +10,7 @@ type PayoutRequestFormProps = {
 };
 
 const roleLabels: Record<PayoutRole, string> = {
-  author: "RegalÃ­as de autor",
+  author: "Regalías de autor",
   affiliate: "Comisiones de afiliado",
 };
 
@@ -93,7 +93,7 @@ export default function PayoutRequestForm({
             className="rounded-xl border border-slate-300 bg-white px-3 py-2"
             aria-label="Origen del saldo"
           >
-            <option value="author">RegalÃ­as de autor</option>
+            <option value="author">Regalías de autor</option>
             <option value="affiliate">Comisiones de afiliado</option>
           </select>
         ) : (
@@ -127,7 +127,7 @@ export default function PayoutRequestForm({
           value={method}
           onChange={(event) => setMethod(event.target.value)}
           className="rounded-xl border border-slate-300 bg-white px-3 py-2"
-          aria-label="MÃ©todo de retiro"
+          aria-label="Método de retiro"
         >
           <option value="paypal">PayPal</option>
           <option value="bank">Transferencia bancaria</option>

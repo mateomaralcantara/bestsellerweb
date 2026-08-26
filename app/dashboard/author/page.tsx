@@ -14,7 +14,7 @@ export default async function AuthorFinancePage() {
         Autor
       </p>
       <h2 className="mt-2 text-3xl font-black text-slate-950">
-        RegalÃ­as y ventas
+        Regalías y ventas
       </h2>
 
       <div className="mt-7">
@@ -27,7 +27,7 @@ export default async function AuthorFinancePage() {
 
       <section className="mt-8">
         <h3 className="mb-4 text-xl font-black text-slate-950">
-          HistÃ³rico de regalÃ­as
+          Historial de regalías
         </h3>
         <FinanceHistory rows={data.ledger} />
       </section>

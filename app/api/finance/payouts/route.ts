@@ -19,7 +19,7 @@ export async function GET() {
   } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    return fail("Debes iniciar sesiÃ³n.", 401);
+    return fail("Debes iniciar sesión.", 401);
   }
 
   const { data, error } = await supabase
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    return fail("Debes iniciar sesiÃ³n.", 401);
+    return fail("Debes iniciar sesión.", 401);
   }
 
   const body = (await request.json().catch(() => null)) as
@@ -81,15 +81,15 @@ export async function POST(request: Request) {
   const roleContext: PayoutRole = body.roleContext;
 
   if (!Number.isFinite(amount) || amount <= 0) {
-    return fail("Monto invÃ¡lido.", 400);
+    return fail("Monto inválido.", 400);
   }
 
   if (!/^[A-Z]{3}$/.test(currency)) {
-    return fail("Moneda invÃ¡lida.", 400);
+    return fail("Moneda inválida.", 400);
   }
 
   if (!method) {
-    return fail("MÃ©todo de retiro invÃ¡lido.", 400);
+    return fail("Método de retiro inválido.", 400);
   }
 
   const { data, error } = await supabase.rpc("finance_request_payout", {

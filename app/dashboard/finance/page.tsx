@@ -30,7 +30,7 @@ export default async function FinancePage() {
 
       <section className="mt-8">
         <h3 className="mb-4 text-xl font-black text-slate-950">
-          HistÃ³rico financiero
+          Historial financiero
         </h3>
         <FinanceHistory rows={data.ledger} />
       </section>
