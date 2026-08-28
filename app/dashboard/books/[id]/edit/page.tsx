@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import EditBookForm from "./EditBookForm";
+import DirectEpubUploadBridge from "./DirectEpubUploadBridge";
 
 export const dynamic = "force-dynamic";
 
@@ -168,5 +169,10 @@ export default async function EditBookPage({ params }: PageProps) {
     }
   }
 
-  return <EditBookForm book={book} edition={editionWithPayPal} />;
+  return (
+    <>
+      <DirectEpubUploadBridge bookId={book.id} />
+      <EditBookForm book={book} edition={editionWithPayPal} />
+    </>
+  );
 }

@@ -59,20 +59,21 @@ async function resolvePreviewImageUrl(
   return page.image_url?.trim() || "";
 }
 
-async function hasAnyEpub(bookId: string) {
+async function hasFullEpub(bookId: string) {
   const { data, error } = await supabaseAdmin
     .from("book_assets")
-    .select("id, asset_type")
+    .select("id")
     .eq("book_id", bookId)
-    .in("asset_type", ["epub_preview", "epub"])
-    .limit(1);
+    .eq("asset_type", "epub")
+    .limit(1)
+    .maybeSingle();
 
   if (error) {
-    console.error("[PREVIEW] Error buscando EPUB:", error.message);
+    console.error("[PREVIEW] Error buscando EPUB completo:", error.message);
     return false;
   }
 
-  return Boolean(data?.length);
+  return Boolean(data);
 }
 
 export default async function CatalogPreviewPage({
@@ -102,7 +103,11 @@ export default async function CatalogPreviewPage({
     notFound();
   }
 
-  if (await hasAnyEpub(book.id)) {
+  // Para EPUB usamos siempre el archivo completo actual como fuente de verdad.
+  // /api/books/[bookkey]/epub?mode=preview crea en servidor una copia recortada
+  // a las primeras 25 secciones legibles. Al reemplazar el EPUB completo, esta
+  // vista cambia automaticamente sin depender de un epub_preview antiguo.
+  if (await hasFullEpub(book.id)) {
     return (
       <div className="h-[100dvh] overflow-hidden bg-[#071018]">
         <EpubReaderClient
@@ -118,6 +123,7 @@ export default async function CatalogPreviewPage({
     );
   }
 
+  // Compatibilidad con libros antiguos que solo tienen preview PDF por imagenes.
   const { data: pages, error: pagesError } = await supabaseAdmin
     .from("book_preview_pages")
     .select(
@@ -129,7 +135,7 @@ export default async function CatalogPreviewPage({
     .returns<PreviewPageRow[]>();
 
   if (pagesError) {
-    console.error("[PREVIEW] Error cargando páginas:", pagesError.message);
+    console.error("[PREVIEW] Error cargando paginas:", pagesError.message);
   }
 
   const previewPages: PreviewPageRow[] =
