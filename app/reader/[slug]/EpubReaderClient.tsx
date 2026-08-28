@@ -8,29 +8,37 @@ type EpubLocation = {
   atEnd?: boolean;
   atStart?: boolean;
   start?: {
-    cfi?: string;
-    href?: string;
-    percentage?: number;
+    cfi?: unknown;
+    href?: unknown;
+    percentage?: unknown;
     displayed?: {
-      page?: number;
-      total?: number;
+      page?: unknown;
+      total?: unknown;
     };
   };
 };
 
 type SpineItem = {
-  href?: string;
-  idref?: string;
-  linear?: string;
+  href?: unknown;
+  idref?: unknown;
+  linear?: unknown;
 };
 
 type EpubBook = {
   ready?: Promise<unknown>;
   package?: {
     metadata?: {
-      layout?: string;
+      layout?: unknown;
       rendition?: {
-        layout?: string;
+        layout?: unknown;
+      };
+    };
+  };
+  packaging?: {
+    metadata?: {
+      layout?: unknown;
+      rendition?: {
+        layout?: unknown;
       };
     };
   };
@@ -98,21 +106,33 @@ const MAX_FONT = 150;
 const FONT_STEP = 10;
 const SAVE_DELAY_MS = 600;
 const LOCATION_CHARS = 900;
-const VIEWPORT_SAFETY_PX = 2;
+const VIEWPORT_WIDTH_RESERVE = 4;
+const VIEWPORT_HEIGHT_RESERVE = 10;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function normalizeHref(value?: string | null) {
-  return String(value || "")
+function asText(value: unknown) {
+  if (typeof value === "string") return value.trim();
+  if (value === null || value === undefined) return "";
+
+  try {
+    return String(value).trim();
+  } catch {
+    return "";
+  }
+}
+
+function normalizeHref(value: unknown) {
+  return asText(value)
     .split("#")[0]
     .replace(/^\.\//, "")
     .replace(/^\//, "")
     .toLowerCase();
 }
 
-function isSkippableSection(href?: string | null) {
+function isSkippableSection(href: unknown) {
   const normalized = normalizeHref(href);
 
   return (
@@ -123,10 +143,24 @@ function isSkippableSection(href?: string | null) {
   );
 }
 
+function isNonLinear(value: unknown) {
+  if (value === false || value === 0) return true;
+  if (value === true || value === 1 || value === null || value === undefined) {
+    return false;
+  }
+
+  const normalized = asText(value).toLowerCase();
+  return normalized === "no" || normalized === "false" || normalized === "0";
+}
+
+function isReadableSpineItem(item: SpineItem) {
+  return !isNonLinear(item.linear) && !isSkippableSection(item.href);
+}
+
 function isFixedLayout(book: EpubBook) {
-  const metadata = book.package?.metadata;
-  const layout = String(
-    metadata?.layout || metadata?.rendition?.layout || ""
+  const metadata = book.package?.metadata ?? book.packaging?.metadata;
+  const layout = asText(
+    metadata?.layout ?? metadata?.rendition?.layout
   ).toLowerCase();
 
   return layout.includes("pre-paginated") || layout.includes("fixed");
@@ -136,24 +170,18 @@ function localKey(progressKey: string) {
   return `libroseller:epub:${progressKey}`;
 }
 
-function normalizeIframeFrame(viewer: HTMLElement | null) {
-  if (!viewer) return;
-
-  viewer.querySelectorAll<HTMLIFrameElement>("iframe").forEach((iframe) => {
-    iframe.style.width = "100%";
-    iframe.style.height = "100%";
-    iframe.style.border = "0";
-    iframe.style.display = "block";
-    iframe.style.transform = "none";
-  });
-}
-
 function getViewportSize(viewer: HTMLElement) {
   const rect = viewer.getBoundingClientRect();
 
   return {
-    width: Math.max(280, Math.floor(rect.width) - VIEWPORT_SAFETY_PX),
-    height: Math.max(360, Math.floor(rect.height) - VIEWPORT_SAFETY_PX),
+    width: Math.max(
+      280,
+      Math.floor(rect.width) - VIEWPORT_WIDTH_RESERVE
+    ),
+    height: Math.max(
+      360,
+      Math.floor(rect.height) - VIEWPORT_HEIGHT_RESERVE
+    ),
   };
 }
 
@@ -168,10 +196,7 @@ function readLocalProgress(progressKey: string): SavedProgress {
     };
 
     return {
-      cfi:
-        typeof parsed.cfi === "string" && parsed.cfi.trim()
-          ? parsed.cfi.trim()
-          : null,
+      cfi: asText(parsed.cfi) || null,
       percent:
         typeof parsed.percent === "number" && Number.isFinite(parsed.percent)
           ? clamp(parsed.percent, 0, 100)
@@ -182,14 +207,21 @@ function readLocalProgress(progressKey: string): SavedProgress {
   }
 }
 
-function findSpineIndex(readableSpine: SpineItem[], href?: string | null) {
+function clearLocalProgress(progressKey: string) {
+  try {
+    localStorage.removeItem(localKey(progressKey));
+  } catch {
+    // El progreso remoto puede corregirse en la próxima reubicación.
+  }
+}
+
+function findSpineIndex(readableSpine: SpineItem[], href: unknown) {
   const target = normalizeHref(href);
   if (!target) return -1;
 
   const exact = readableSpine.findIndex(
     (item) => normalizeHref(item.href) === target
   );
-
   if (exact >= 0) return exact;
 
   const targetName = target.split("/").pop() || target;
@@ -208,7 +240,7 @@ function progressFromLocation(params: {
   previous: number;
 }) {
   const { book, location, readableSpine, locationsReady, previous } = params;
-  const cfi = location.start?.cfi?.trim() || "";
+  const cfi = asText(location.start?.cfi);
 
   if (location.atEnd) return 100;
   if (location.atStart) return 0;
@@ -220,19 +252,7 @@ function progressFromLocation(params: {
         return clamp(ratio * 100, 0, 100);
       }
     } catch {
-      // Se usa el cálculo estructural de respaldo.
-    }
-  }
-
-  const reportedPercentage = Number(location.start?.percentage);
-  if (Number.isFinite(reportedPercentage)) {
-    const normalized =
-      reportedPercentage <= 1
-        ? reportedPercentage * 100
-        : reportedPercentage;
-
-    if (normalized >= 0 && normalized <= 100) {
-      return normalized;
+      // Se continúa con el cálculo estructural.
     }
   }
 
@@ -251,6 +271,14 @@ function progressFromLocation(params: {
       0,
       99.9
     );
+  }
+
+  const reported = Number(location.start?.percentage);
+  if (Number.isFinite(reported)) {
+    const normalized = reported <= 1 ? reported * 100 : reported;
+    if (normalized >= 0 && normalized <= 100) {
+      return normalized;
+    }
   }
 
   return clamp(previous, 0, 100);
@@ -298,19 +326,7 @@ function paperRules(
 function nightRules(
   fixedLayout: boolean
 ): Record<string, Record<string, string>> {
-  if (fixedLayout) {
-    return {
-      body: {
-        color: "#e5e7eb !important",
-        background: "#111827 !important",
-      },
-      a: {
-        color: "#93c5fd !important",
-      },
-    };
-  }
-
-  const base = paperRules(false);
+  const base = paperRules(fixedLayout);
 
   return {
     ...base,
@@ -346,7 +362,6 @@ export default function EpubReaderClient({
   const progressRef = useRef(0);
   const readyRef = useRef(false);
   const locationsReadyRef = useRef(false);
-  const skipGuardRef = useRef(false);
   const fixedLayoutRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
@@ -432,19 +447,14 @@ export default function EpubReaderClient({
       };
 
       const remote = payload.progress;
-      const remoteLocation = remote?.currentLocation;
-      const remotePercent = remote?.progressPercent;
+      const remoteCfi = asText(remote?.currentLocation);
+      const remotePercent = Number(remote?.progressPercent);
 
       return {
-        cfi:
-          typeof remoteLocation === "string" &&
-          remoteLocation.startsWith("epubcfi(")
-            ? remoteLocation
-            : local.cfi,
-        percent:
-          typeof remotePercent === "number" && Number.isFinite(remotePercent)
-            ? clamp(remotePercent, 0, 100)
-            : local.percent,
+        cfi: remoteCfi.startsWith("epubcfi(") ? remoteCfi : local.cfi,
+        percent: Number.isFinite(remotePercent)
+          ? clamp(remotePercent, 0, 100)
+          : local.percent,
       };
     } catch {
       return local;
@@ -500,20 +510,18 @@ export default function EpubReaderClient({
 
         fixedLayoutRef.current = isFixedLayout(book);
 
-        const spineItems = book.spine?.spineItems ?? [];
-        const readableSpine = spineItems.filter(
-          (item) =>
-            item.linear?.toLowerCase() !== "no" &&
-            !isSkippableSection(item.href)
-        );
+        const spineItems = Array.isArray(book.spine?.spineItems)
+          ? book.spine?.spineItems ?? []
+          : [];
+        const readableSpine = spineItems.filter(isReadableSpineItem);
         readableSpineRef.current = readableSpine;
 
         const firstReadable = readableSpine[0] ?? book.spine?.first?.();
-        const firstHref = firstReadable?.href?.trim() || undefined;
+        const firstHref = asText(firstReadable?.href) || undefined;
 
         console.info("EPUB first readable section:", {
           href: firstHref ?? null,
-          idref: firstReadable?.idref ?? null,
+          idref: asText(firstReadable?.idref) || null,
           fixedLayout: fixedLayoutRef.current,
           readableSections: readableSpine.length,
           skippedNavigationItems: spineItems.filter((item) =>
@@ -529,7 +537,6 @@ export default function EpubReaderClient({
           flow: "paginated",
           manager: "default",
         });
-
         renditionRef.current = rendition;
 
         rendition.themes.register?.(
@@ -546,25 +553,11 @@ export default function EpubReaderClient({
           rendition.themes.fontSize("100%");
         }
 
-        rendition.on("rendered", () => {
-          window.requestAnimationFrame(() => normalizeIframeFrame(viewer));
-        });
-
         rendition.on("relocated", (location) => {
-          const cfi = location.start?.cfi?.trim() || null;
-          const href = location.start?.href?.trim() || null;
+          const cfi = asText(location.start?.cfi) || null;
+          const href = asText(location.start?.href) || null;
           currentCfiRef.current = cfi;
           currentHrefRef.current = href;
-
-          if (isSkippableSection(href) && !skipGuardRef.current) {
-            skipGuardRef.current = true;
-            void rendition.next().finally(() => {
-              window.setTimeout(() => {
-                skipGuardRef.current = false;
-              }, 100);
-            });
-            return;
-          }
 
           const nextPercent = progressFromLocation({
             book,
@@ -582,7 +575,7 @@ export default function EpubReaderClient({
               : "Página"
           );
 
-          if (readyRef.current && cfi) {
+          if (readyRef.current && cfi && !isSkippableSection(href)) {
             persistProgress(cfi, nextPercent);
           }
         });
@@ -604,15 +597,14 @@ export default function EpubReaderClient({
               "EPUB saved location inválida; abriendo sección inicial:",
               savedError
             );
+            clearLocalProgress(progressKey);
             await rendition.display(firstHref);
           }
         } else {
           await rendition.display(firstHref);
         }
 
-        normalizeIframeFrame(viewer);
         setLoading(false);
-
         console.info(
           "EPUB first page ready:",
           `${Math.round(performance.now() - startedAt)}ms`
@@ -690,6 +682,7 @@ export default function EpubReaderClient({
     loadSavedProgress,
     mode,
     persistProgress,
+    progressKey,
   ]);
 
   useEffect(() => {
@@ -713,9 +706,6 @@ export default function EpubReaderClient({
 
         try {
           currentRendition.resize(viewport.width, viewport.height);
-          window.requestAnimationFrame(() =>
-            normalizeIframeFrame(currentViewer)
-          );
         } catch (resizeError) {
           console.warn("EPUB resize pospuesto:", resizeError);
         }
@@ -743,23 +733,17 @@ export default function EpubReaderClient({
       setMoving(true);
 
       try {
-        if (direction === "next") {
-          await rendition.next();
+        const advance =
+          direction === "next" ? rendition.next.bind(rendition) : rendition.prev.bind(rendition);
 
-          if (isSkippableSection(currentHrefRef.current)) {
-            await rendition.next();
-          }
-        } else {
-          await rendition.prev();
+        await advance();
 
-          if (isSkippableSection(currentHrefRef.current)) {
-            await rendition.prev();
-          }
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          if (!isSkippableSection(currentHrefRef.current)) break;
+          await advance();
         }
-
-        window.requestAnimationFrame(() =>
-          normalizeIframeFrame(viewerRef.current)
-        );
+      } catch (moveError) {
+        console.warn("No se pudo cambiar de página EPUB:", moveError);
       } finally {
         window.setTimeout(() => setMoving(false), 100);
       }
@@ -849,10 +833,10 @@ export default function EpubReaderClient({
           <div
             className="absolute"
             style={{
-              top: "clamp(14px, 2.2vh, 28px)",
-              right: "clamp(18px, 4vw, 52px)",
-              bottom: "clamp(22px, 3.2vh, 38px)",
-              left: "clamp(18px, 4vw, 52px)",
+              top: "clamp(16px, 2.5vh, 30px)",
+              right: "clamp(20px, 4vw, 54px)",
+              bottom: "clamp(28px, 4vh, 48px)",
+              left: "clamp(20px, 4vw, 54px)",
             }}
           >
             <div
