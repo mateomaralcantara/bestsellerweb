@@ -7,7 +7,11 @@ export const PAID_ACCESS_STATUSES = [
   "succeeded",
 ] as const;
 
-const READABLE_ASSET_TYPES = ["manuscript_pdf", "pdf", "manuscript"] as const;
+const READABLE_PDF_ASSET_TYPES = [
+  "manuscript_pdf",
+  "pdf",
+  "manuscript",
+] as const;
 
 export type BookAccessUser = {
   id: string;
@@ -31,6 +35,10 @@ export type ReadableBookAsset = {
   mime_type: string | null;
   is_public: boolean | null;
   sort_order: number | null;
+};
+
+export type PreferredReaderAsset = ReadableBookAsset & {
+  readerFormat: "epub" | "pdf";
 };
 
 export async function getPublishedBookBySlug(
@@ -59,16 +67,53 @@ export async function getReadableBookAsset(
       "asset_type, storage_bucket, storage_path, file_url, mime_type, is_public, sort_order"
     )
     .eq("book_id", bookId)
-    .in("asset_type", [...READABLE_ASSET_TYPES])
+    .in("asset_type", [...READABLE_PDF_ASSET_TYPES])
     .order("sort_order", { ascending: true })
     .limit(1)
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Error cargando archivo del libro: ${error.message}`);
+    throw new Error(`Error cargando archivo PDF del libro: ${error.message}`);
   }
 
   return (data as ReadableBookAsset | null) ?? null;
+}
+
+export async function getPreferredReaderAsset(
+  bookId: string
+): Promise<PreferredReaderAsset | null> {
+  const { data: epubAsset, error: epubError } = await supabaseAdmin
+    .from("book_assets")
+    .select(
+      "asset_type, storage_bucket, storage_path, file_url, mime_type, is_public, sort_order"
+    )
+    .eq("book_id", bookId)
+    .eq("asset_type", "epub")
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (epubError) {
+    throw new Error(`Error cargando EPUB del libro: ${epubError.message}`);
+  }
+
+  if (epubAsset) {
+    return {
+      ...(epubAsset as ReadableBookAsset),
+      readerFormat: "epub",
+    };
+  }
+
+  const pdfAsset = await getReadableBookAsset(bookId);
+
+  if (!pdfAsset) {
+    return null;
+  }
+
+  return {
+    ...pdfAsset,
+    readerFormat: "pdf",
+  };
 }
 
 export async function userHasDirectPurchase(params: {
