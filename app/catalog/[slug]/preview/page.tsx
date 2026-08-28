@@ -59,21 +59,20 @@ async function resolvePreviewImageUrl(
   return page.image_url?.trim() || "";
 }
 
-async function hasEpubPreview(bookId: string) {
+async function hasAnyEpub(bookId: string) {
   const { data, error } = await supabaseAdmin
     .from("book_assets")
-    .select("id")
+    .select("id, asset_type")
     .eq("book_id", bookId)
-    .eq("asset_type", "epub_preview")
-    .limit(1)
-    .maybeSingle();
+    .in("asset_type", ["epub_preview", "epub"])
+    .limit(1);
 
   if (error) {
-    console.error("[PREVIEW] Error buscando EPUB preview:", error.message);
+    console.error("[PREVIEW] Error buscando EPUB:", error.message);
     return false;
   }
 
-  return Boolean(data);
+  return Boolean(data?.length);
 }
 
 export default async function CatalogPreviewPage({
@@ -103,7 +102,7 @@ export default async function CatalogPreviewPage({
     notFound();
   }
 
-  if (await hasEpubPreview(book.id)) {
+  if (await hasAnyEpub(book.id)) {
     return (
       <div className="h-[100dvh] overflow-hidden bg-[#071018]">
         <EpubReaderClient
