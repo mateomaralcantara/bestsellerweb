@@ -168,7 +168,9 @@ async function downloadEpubAsset(asset: BookAsset) {
     .download(asset.storage_path);
 
   if (error || !file) {
-    throw new Error(error?.message || "No se pudo descargar el EPUB desde Storage.");
+    throw new Error(
+      error?.message || "No se pudo descargar el EPUB desde Storage."
+    );
   }
 
   const arrayBuffer = await file.arrayBuffer();
@@ -221,7 +223,7 @@ function isNavigationItem(item: ManifestItem) {
   );
 }
 
-async function buildSafePreviewEpub(arrayBuffer: ArrayBuffer) {
+async function buildSafePreviewEpub(arrayBuffer: ArrayBuffer): Promise<ArrayBuffer> {
   const zip = await JSZip.loadAsync(arrayBuffer);
   const containerFile = zip.file("META-INF/container.xml");
 
@@ -317,19 +319,18 @@ async function buildSafePreviewEpub(arrayBuffer: ArrayBuffer) {
   }
 
   zip.file(opfPath, nextOpf);
-
-  // EPUB exige mimetype como primera entrada y sin compresion. JSZip conserva
-  // la entrada existente, pero la reescribimos para asegurar el MIME correcto.
   zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
 
   const result = await zip.generateAsync({
-    type: "nodebuffer",
+    type: "uint8array",
     compression: "DEFLATE",
     compressionOptions: { level: 6 },
     mimeType: "application/epub+zip",
   });
 
-  return result;
+  const exact = new Uint8Array(result.byteLength);
+  exact.set(result);
+  return exact.buffer;
 }
 
 export async function GET(request: Request, { params }: RouteContext) {
@@ -371,7 +372,7 @@ export async function GET(request: Request, { params }: RouteContext) {
 
     const fullEpub = await downloadEpubAsset(asset);
     const payload =
-      mode === "preview" ? await buildSafePreviewEpub(fullEpub) : Buffer.from(fullEpub);
+      mode === "preview" ? await buildSafePreviewEpub(fullEpub) : fullEpub;
 
     const fileName = safeFileName(book.title);
 
