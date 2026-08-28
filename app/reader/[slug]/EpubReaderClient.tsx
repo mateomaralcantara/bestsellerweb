@@ -152,14 +152,8 @@ function getViewportSize(viewer: HTMLElement) {
   const rect = viewer.getBoundingClientRect();
 
   return {
-    width: Math.max(
-      280,
-      Math.floor(rect.width) - VIEWPORT_SAFETY_PX
-    ),
-    height: Math.max(
-      360,
-      Math.floor(rect.height) - VIEWPORT_SAFETY_PX
-    ),
+    width: Math.max(280, Math.floor(rect.width) - VIEWPORT_SAFETY_PX),
+    height: Math.max(360, Math.floor(rect.height) - VIEWPORT_SAFETY_PX),
   };
 }
 
@@ -262,8 +256,10 @@ function progressFromLocation(params: {
   return clamp(previous, 0, 100);
 }
 
-function paperRules(isFixed: boolean) {
-  if (isFixed) {
+function paperRules(
+  fixedLayout: boolean
+): Record<string, Record<string, string>> {
+  if (fixedLayout) {
     return {
       body: {
         color: "#172033 !important",
@@ -299,8 +295,10 @@ function paperRules(isFixed: boolean) {
   };
 }
 
-function nightRules(isFixed: boolean) {
-  if (isFixed) {
+function nightRules(
+  fixedLayout: boolean
+): Record<string, Record<string, string>> {
+  if (fixedLayout) {
     return {
       body: {
         color: "#e5e7eb !important",
@@ -312,10 +310,12 @@ function nightRules(isFixed: boolean) {
     };
   }
 
+  const base = paperRules(false);
+
   return {
-    ...paperRules(false),
+    ...base,
     body: {
-      ...paperRules(false).body,
+      ...base.body,
       color: "#e5e7eb !important",
       background: "#111827 !important",
     },
