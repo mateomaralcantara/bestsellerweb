@@ -39,13 +39,15 @@ export default function DirectEpubUploadBridge({
   const [active, setActive] = useState(false);
 
   useEffect(() => {
-    async function interceptSubmit(event: SubmitEvent) {
+    async function interceptSubmit(event: Event) {
+      const submitEvent = event as SubmitEvent;
+
       if (bypassNextSubmitRef.current) {
         bypassNextSubmitRef.current = false;
         return;
       }
 
-      const form = event.target;
+      const form = submitEvent.target;
       if (!(form instanceof HTMLFormElement)) return;
 
       const epubInput = form.querySelector<HTMLInputElement>(
@@ -55,8 +57,8 @@ export default function DirectEpubUploadBridge({
       const file = epubInput?.files?.[0];
       if (!epubInput || !file) return;
 
-      event.preventDefault();
-      event.stopImmediatePropagation();
+      submitEvent.preventDefault();
+      submitEvent.stopImmediatePropagation();
 
       setError("");
       setActive(true);
@@ -105,7 +107,6 @@ export default function DirectEpubUploadBridge({
           .from(ticket.bucket)
           .uploadToSignedUrl(ticket.path, ticket.token, file, {
             contentType: file.type || "application/epub+zip",
-            upsert: false,
           });
 
         if (uploadError) {
@@ -149,7 +150,7 @@ export default function DirectEpubUploadBridge({
         bypassNextSubmitRef.current = true;
         setMessage("EPUB cargado. Guardando los demás datos del libro...");
 
-        const submitter = event.submitter;
+        const submitter = submitEvent.submitter;
         if (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) {
           form.requestSubmit(submitter);
         } else {
