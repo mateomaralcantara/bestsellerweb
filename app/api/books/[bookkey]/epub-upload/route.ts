@@ -64,11 +64,6 @@ function safeSlug(value: string) {
   );
 }
 
-function safeFileName(value: string) {
-  const name = value.trim().split(/[\\/]/).pop() || "libro.epub";
-  return name.toLowerCase().endsWith(".epub") ? name : `${name}.epub`;
-}
-
 async function getOwnedBook(bookkey: string) {
   const supabase = await createClient();
   const {
@@ -258,8 +253,6 @@ export async function PUT(request: Request, { params }: RouteContext) {
     };
 
     const storagePath = typeof body.path === "string" ? body.path.trim() : "";
-    const fileName =
-      typeof body.fileName === "string" ? safeFileName(body.fileName) : "libro.epub";
     const declaredSize = Number(body.fileSize);
     const mimeType =
       typeof body.mimeType === "string" && ALLOWED_MIME_TYPES.has(body.mimeType.trim())
@@ -292,6 +285,9 @@ export async function PUT(request: Request, { params }: RouteContext) {
     const now = new Date().toISOString();
     const primaryAsset = previousEpubs?.[0] ?? null;
 
+    // Mantener este payload deliberadamente limitado a columnas ya utilizadas
+    // y existentes en book_assets. El nombre y tamaño viven en Storage y no son
+    // necesarios para resolver/servir el EPUB.
     const assetPayload = {
       book_id: access.book.id,
       edition_id: editionId,
@@ -302,10 +298,6 @@ export async function PUT(request: Request, { params }: RouteContext) {
       mime_type: mimeType,
       is_public: false,
       sort_order: 2,
-      file_name: fileName,
-      file_size:
-        verified.size ?? (Number.isFinite(declaredSize) && declaredSize > 0 ? declaredSize : null),
-      updated_at: now,
     };
 
     if (primaryAsset) {
@@ -375,7 +367,9 @@ export async function PUT(request: Request, { params }: RouteContext) {
       epub: {
         bucket: FILE_BUCKET,
         path: storagePath,
-        size: assetPayload.file_size,
+        size:
+          verified.size ??
+          (Number.isFinite(declaredSize) && declaredSize > 0 ? declaredSize : null),
       },
       preview: {
         mode: "derived_from_current_epub",
