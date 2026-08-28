@@ -18,6 +18,9 @@ type RouteContext = {
 type ProgressPayload = {
   currentPage?: unknown;
   totalPages?: unknown;
+  currentLocation?: unknown;
+  progressPercent?: unknown;
+  locationType?: unknown;
 };
 
 type ProgressRecord = {
@@ -25,6 +28,7 @@ type ProgressRecord = {
   total_pages: number;
   progress_percent: number;
   current_location: string | null;
+  location_type: string | null;
   last_opened_at: string;
   updated_at: string;
 };
@@ -55,6 +59,12 @@ function toPositiveInteger(value: unknown) {
   return integer >= 1 ? integer : null;
 }
 
+function toPercent(value: unknown) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Number(Math.min(100, Math.max(0, number)).toFixed(2));
+}
+
 function serializeProgress(progress: ProgressRecord | null) {
   if (!progress) return null;
 
@@ -63,6 +73,7 @@ function serializeProgress(progress: ProgressRecord | null) {
     totalPages: Number(progress.total_pages),
     progressPercent: Number(progress.progress_percent),
     currentLocation: progress.current_location,
+    locationType: progress.location_type,
     lastOpenedAt: progress.last_opened_at,
     updatedAt: progress.updated_at,
   };
@@ -136,7 +147,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const { data, error } = await supabaseAdmin
       .from("book_reading_progress")
       .select(
-        "current_page, total_pages, progress_percent, current_location, last_opened_at, updated_at"
+        "current_page, total_pages, progress_percent, current_location, location_type, last_opened_at, updated_at"
       )
       .eq("user_id", access.user.id)
       .eq("book_id", access.book.id)
@@ -176,6 +187,69 @@ async function saveProgress(request: Request, { params }: RouteContext) {
       return jsonResponse({ error: "Datos de progreso inválidos." }, 400);
     }
 
+    const access = await getAuthorizedReader(bookkey);
+
+    if (access.error || !access.user || !access.book) {
+      return access.error;
+    }
+
+    const requestedLocation =
+      typeof payload.currentLocation === "string"
+        ? payload.currentLocation.trim()
+        : "";
+    const requestedType =
+      typeof payload.locationType === "string"
+        ? payload.locationType.trim()
+        : "";
+    const requestedPercent = toPercent(payload.progressPercent);
+
+    const isEpubProgress =
+      requestedType === "epub_cfi" &&
+      requestedLocation.startsWith("epubcfi(") &&
+      requestedPercent !== null;
+
+    const now = new Date().toISOString();
+
+    if (isEpubProgress) {
+      const virtualPage = Math.max(1, Math.round(requestedPercent || 1));
+
+      const { data, error } = await supabaseAdmin
+        .from("book_reading_progress")
+        .upsert(
+          {
+            user_id: access.user.id,
+            book_id: access.book.id,
+            current_page: virtualPage,
+            total_pages: 100,
+            progress_percent: requestedPercent,
+            location_type: "epub_cfi",
+            current_location: requestedLocation,
+            last_opened_at: now,
+            updated_at: now,
+          },
+          {
+            onConflict: "user_id,book_id",
+          }
+        )
+        .select(
+          "current_page, total_pages, progress_percent, current_location, location_type, last_opened_at, updated_at"
+        )
+        .single<ProgressRecord>();
+
+      if (error) {
+        console.error("Error guardando progreso EPUB:", error.message);
+        return jsonResponse(
+          { error: "No se pudo guardar el progreso EPUB." },
+          500
+        );
+      }
+
+      return jsonResponse({
+        ok: true,
+        progress: serializeProgress(data),
+      });
+    }
+
     const requestedPage = toPositiveInteger(payload.currentPage);
     const totalPages = toPositiveInteger(payload.totalPages);
 
@@ -190,13 +264,7 @@ async function saveProgress(request: Request, { params }: RouteContext) {
     const progressPercent = Number(
       Math.min(100, (currentPage / totalPages) * 100).toFixed(2)
     );
-    const access = await getAuthorizedReader(bookkey);
 
-    if (access.error || !access.user || !access.book) {
-      return access.error;
-    }
-
-    const now = new Date().toISOString();
     const { data, error } = await supabaseAdmin
       .from("book_reading_progress")
       .upsert(
@@ -216,7 +284,7 @@ async function saveProgress(request: Request, { params }: RouteContext) {
         }
       )
       .select(
-        "current_page, total_pages, progress_percent, current_location, last_opened_at, updated_at"
+        "current_page, total_pages, progress_percent, current_location, location_type, last_opened_at, updated_at"
       )
       .single<ProgressRecord>();
 
