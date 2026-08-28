@@ -1,10 +1,12 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
+  getPreferredReaderAsset,
   getPublishedBookBySlug,
   userCanReadBook,
 } from "@/lib/book-access";
 import BookReaderClient from "./BookReaderClient";
+import EpubReaderClient from "./EpubReaderClient";
 
 export const dynamic = "force-dynamic";
 
@@ -58,13 +60,38 @@ export default async function ReaderPage({ params }: PageProps) {
     redirect(getCheckoutUrl(book.slug));
   }
 
+  const readerAsset = await getPreferredReaderAsset(book.id);
+
+  if (!readerAsset) {
+    notFound();
+  }
+
+  const progressUrl = `/api/books/${encodeURIComponent(book.slug)}/progress`;
+
+  if (readerAsset.readerFormat === "epub") {
+    return (
+      <div className="h-[100dvh] overflow-hidden bg-[#071018]">
+        <EpubReaderClient
+          title={book.title}
+          epubUrl={`/api/books/${encodeURIComponent(book.slug)}/epub?mode=full`}
+          progressUrl={progressUrl}
+          progressKey={`full:${book.slug}:epub`}
+          exitUrl="/dashboard/books/purchased"
+          exitLabel="Volver a mi biblioteca"
+          mode="full"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="h-[100dvh] overflow-hidden bg-[#ececea]">
       <BookReaderClient
         title={book.title}
         coverUrl={book.cover_url}
         pdfUrl={`/api/books/${encodeURIComponent(book.slug)}/read`}
-        progressUrl={`/api/books/${encodeURIComponent(book.slug)}/progress`}
+        progressUrl={progressUrl}
+        progressKey={`full:${book.slug}:pdf`}
       />
     </div>
   );
