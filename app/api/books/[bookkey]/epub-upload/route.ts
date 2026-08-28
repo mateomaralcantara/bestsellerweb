@@ -28,6 +28,16 @@ type OwnedBook = {
   owner_user_id: string;
 };
 
+type EditionRow = {
+  id: string;
+};
+
+type ExistingAsset = {
+  id: string;
+  storage_bucket: string | null;
+  storage_path: string | null;
+};
+
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ ok: false, error: message }, { status });
 }
@@ -52,6 +62,11 @@ function safeSlug(value: string) {
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "") || "libro"
   );
+}
+
+function safeFileName(value: string) {
+  const name = value.trim().split(/[\\/]/).pop() || "libro.epub";
+  return name.toLowerCase().endsWith(".epub") ? name : `${name}.epub`;
 }
 
 async function getOwnedBook(bookkey: string) {
@@ -97,6 +112,75 @@ async function getOwnedBook(bookkey: string) {
   return { user, book: data, error: null };
 }
 
+async function getActiveEdition(bookId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("book_editions")
+    .select("id")
+    .eq("book_id", bookId)
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle<EditionRow>();
+
+  if (error) {
+    throw new Error(`Error cargando edición: ${error.message}`);
+  }
+
+  return data?.id ?? null;
+}
+
+async function verifyUploadedObject(book: OwnedBook, storagePath: string) {
+  const expectedPrefix = `books/${book.id}/full/`;
+
+  if (!storagePath.startsWith(expectedPrefix) || !storagePath.endsWith(".epub")) {
+    throw new Error("La ruta EPUB subida no es válida para este libro.");
+  }
+
+  const fileName = storagePath.slice(expectedPrefix.length);
+
+  if (!fileName || fileName.includes("/")) {
+    throw new Error("La ruta EPUB subida no es válida.");
+  }
+
+  const { data, error } = await supabaseAdmin.storage
+    .from(FILE_BUCKET)
+    .list(expectedPrefix.replace(/\/$/, ""), {
+      search: fileName,
+      limit: 10,
+    });
+
+  if (error) {
+    throw new Error(`No se pudo verificar el EPUB subido: ${error.message}`);
+  }
+
+  const uploaded = (data ?? []).find((item) => item.name === fileName);
+
+  if (!uploaded) {
+    throw new Error("El EPUB todavía no aparece en Storage.");
+  }
+
+  const size = Number(uploaded.metadata?.size ?? 0);
+
+  if (Number.isFinite(size) && size > MAX_EPUB_SIZE_BYTES) {
+    await supabaseAdmin.storage.from(FILE_BUCKET).remove([storagePath]);
+    throw new Error(`El EPUB no debe superar ${MAX_EPUB_SIZE_MB} MB.`);
+  }
+
+  return {
+    size: Number.isFinite(size) && size > 0 ? size : null,
+  };
+}
+
+async function removeStorageObjects(paths: Array<string | null | undefined>) {
+  const clean = Array.from(new Set(paths.filter((item): item is string => Boolean(item))));
+  if (clean.length === 0) return;
+
+  const { error } = await supabaseAdmin.storage.from(FILE_BUCKET).remove(clean);
+  if (error) {
+    console.warn("No se pudieron limpiar EPUB anteriores:", error.message);
+  }
+}
+
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const bookkey = normalizeBookKey((await params).bookkey);
@@ -124,10 +208,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     if (fileSize > MAX_EPUB_SIZE_BYTES) {
-      return jsonError(
-        `El EPUB no debe superar ${MAX_EPUB_SIZE_MB} MB.`,
-        413
-      );
+      return jsonError(`El EPUB no debe superar ${MAX_EPUB_SIZE_MB} MB.`, 413);
     }
 
     if (!ALLOWED_MIME_TYPES.has(mimeType)) {
@@ -158,5 +239,153 @@ export async function POST(request: Request, { params }: RouteContext) {
   } catch (error) {
     console.error("POST /api/books/[bookkey]/epub-upload error:", error);
     return jsonError("Error preparando la carga directa del EPUB.", 500);
+  }
+}
+
+export async function PUT(request: Request, { params }: RouteContext) {
+  try {
+    const bookkey = normalizeBookKey((await params).bookkey);
+    if (!bookkey) return jsonError("ID de libro inválido.", 400);
+
+    const access = await getOwnedBook(bookkey);
+    if (access.error || !access.book || !access.user) return access.error;
+
+    const body = (await request.json()) as {
+      path?: unknown;
+      fileName?: unknown;
+      fileSize?: unknown;
+      mimeType?: unknown;
+    };
+
+    const storagePath = typeof body.path === "string" ? body.path.trim() : "";
+    const fileName =
+      typeof body.fileName === "string" ? safeFileName(body.fileName) : "libro.epub";
+    const declaredSize = Number(body.fileSize);
+    const mimeType =
+      typeof body.mimeType === "string" && ALLOWED_MIME_TYPES.has(body.mimeType.trim())
+        ? body.mimeType.trim() || "application/epub+zip"
+        : "application/epub+zip";
+
+    if (!storagePath) {
+      return jsonError("Falta la ruta del EPUB cargado.", 400);
+    }
+
+    if (Number.isFinite(declaredSize) && declaredSize > MAX_EPUB_SIZE_BYTES) {
+      return jsonError(`El EPUB no debe superar ${MAX_EPUB_SIZE_MB} MB.`, 413);
+    }
+
+    const verified = await verifyUploadedObject(access.book, storagePath);
+    const editionId = await getActiveEdition(access.book.id);
+
+    const { data: previousEpubs, error: previousError } = await supabaseAdmin
+      .from("book_assets")
+      .select("id, storage_bucket, storage_path")
+      .eq("book_id", access.book.id)
+      .eq("asset_type", "epub")
+      .order("sort_order", { ascending: true })
+      .returns<ExistingAsset[]>();
+
+    if (previousError) {
+      throw new Error(`Error cargando EPUB anterior: ${previousError.message}`);
+    }
+
+    const now = new Date().toISOString();
+    const primaryAsset = previousEpubs?.[0] ?? null;
+
+    const assetPayload = {
+      book_id: access.book.id,
+      edition_id: editionId,
+      asset_type: "epub",
+      storage_bucket: FILE_BUCKET,
+      storage_path: storagePath,
+      file_url: null,
+      mime_type: mimeType,
+      is_public: false,
+      sort_order: 2,
+      file_name: fileName,
+      file_size:
+        verified.size ?? (Number.isFinite(declaredSize) && declaredSize > 0 ? declaredSize : null),
+      updated_at: now,
+    };
+
+    if (primaryAsset) {
+      const { error } = await supabaseAdmin
+        .from("book_assets")
+        .update(assetPayload)
+        .eq("id", primaryAsset.id);
+
+      if (error) {
+        throw new Error(`Error actualizando asset EPUB: ${error.message}`);
+      }
+
+      const duplicateIds = (previousEpubs ?? []).slice(1).map((item) => item.id);
+      if (duplicateIds.length > 0) {
+        await supabaseAdmin.from("book_assets").delete().in("id", duplicateIds);
+      }
+    } else {
+      const { error } = await supabaseAdmin.from("book_assets").insert(assetPayload);
+      if (error) {
+        throw new Error(`Error registrando asset EPUB: ${error.message}`);
+      }
+    }
+
+    const { data: oldPreviews } = await supabaseAdmin
+      .from("book_assets")
+      .select("id, storage_bucket, storage_path")
+      .eq("book_id", access.book.id)
+      .eq("asset_type", "epub_preview")
+      .returns<ExistingAsset[]>();
+
+    const { error: deletePreviewError } = await supabaseAdmin
+      .from("book_assets")
+      .delete()
+      .eq("book_id", access.book.id)
+      .eq("asset_type", "epub_preview");
+
+    if (deletePreviewError) {
+      console.warn("No se pudo limpiar epub_preview anterior:", deletePreviewError.message);
+    }
+
+    const { error: bookUpdateError } = await supabaseAdmin
+      .from("books")
+      .update({
+        preview_mode: "epub_preview",
+        preview_status: "ready",
+        preview_page_count: 25,
+        preview_error: null,
+        preview_generated_at: now,
+        updated_at: now,
+      })
+      .eq("id", access.book.id);
+
+    if (bookUpdateError) {
+      console.warn("No se pudo actualizar metadata preview:", bookUpdateError.message);
+    }
+
+    await removeStorageObjects([
+      ...(previousEpubs ?? [])
+        .map((item) => item.storage_path)
+        .filter((item) => item && item !== storagePath),
+      ...(oldPreviews ?? []).map((item) => item.storage_path),
+    ]);
+
+    return NextResponse.json({
+      ok: true,
+      message: "EPUB actualizado directamente en Storage.",
+      epub: {
+        bucket: FILE_BUCKET,
+        path: storagePath,
+        size: assetPayload.file_size,
+      },
+      preview: {
+        mode: "derived_from_current_epub",
+        pageCount: 25,
+        refreshed: true,
+      },
+    });
+  } catch (error) {
+    console.error("PUT /api/books/[bookkey]/epub-upload error:", error);
+    const message = error instanceof Error ? error.message : "Error finalizando EPUB.";
+    return jsonError(message, 500);
   }
 }
