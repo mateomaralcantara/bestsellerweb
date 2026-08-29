@@ -43,29 +43,52 @@ export function BookSocialProof({
     safeSalesCount
   );
 
+  if (safeRating <= 0) {
+    return (
+      <div
+        className={`flex flex-wrap items-center gap-x-2 gap-y-1 ${
+          compact ? "text-xs" : "text-sm"
+        } ${className}`}
+        aria-label={
+          safeSalesCount > 0
+            ? `${formattedSalesCount} compras verificadas; sin reseñas todavía`
+            : "Libro nuevo; sin reseñas todavía"
+        }
+      >
+        <span className="rounded-full bg-blue-50 px-2 py-1 font-black text-blue-700">
+          Nuevo
+        </span>
+        <span className="font-bold text-slate-600">Sin reseñas todavía</span>
+        {safeSalesCount > 0 ? (
+          <>
+            <span className="text-slate-300" aria-hidden="true">·</span>
+            <span className="font-bold text-slate-600">
+              {formattedSalesCount} compras verificadas
+            </span>
+          </>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div
       className={`flex flex-wrap items-center gap-x-2 gap-y-1 ${
         compact ? "text-xs" : "text-sm"
       } ${className}`}
-      aria-label={`${safeRating.toFixed(1)} de 5 estrellas; ${formattedSalesCount} lectores`}
+      aria-label={`${safeRating.toFixed(1)} de 5 estrellas; ${formattedSalesCount} compras verificadas`}
     >
       <span className="flex items-center gap-0.5">
         {STAR_INDEXES.map((index) => (
           <RatingStar key={index} fill={safeRating - index} />
         ))}
       </span>
-
       <strong className="font-black text-amber-700">
         {safeRating.toFixed(1)}/5
       </strong>
-
-      <span className="text-slate-300" aria-hidden="true">
-        ·
-      </span>
-
+      <span className="text-slate-300" aria-hidden="true">·</span>
       <span className="font-bold text-slate-600">
-        {formattedSalesCount} lectores
+        {formattedSalesCount} compras verificadas
       </span>
     </div>
   );
