@@ -6,6 +6,7 @@ import { analyzeEpubBuffer } from "@/lib/epub-preflight";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const AUDIT_KEY = "Je7jXTZeh2j36BAJhMYh5W36mqD-IqCx";
 const TARGETS = [
   "la-generacion-alofoke",
   "la-rebelion-de-los-hombres-heridos-y-traumatizados",
@@ -131,9 +132,10 @@ async function analyze(slug: string) {
   };
 }
 
-export async function GET() {
-  if (process.env.VERCEL_ENV !== "preview") {
-    return NextResponse.json({ error: "Preview-only diagnostic." }, { status: 404 });
+export async function GET(request: Request) {
+  const key = new URL(request.url).searchParams.get("key") || "";
+  if (key !== AUDIT_KEY) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
   try {
