@@ -4,6 +4,7 @@ import { requireAdminRolePage } from "@/lib/admin/superadmin";
 
 const links = [
   ["/admin", "Centro de mando", "Resumen ejecutivo"],
+  ["/admin/captacion", "Captación", "Audiencia, correos y preferencias"],
   ["/admin/observability", "Observabilidad", "SLO, salud y señales críticas"],
   ["/admin/users", "Usuarios", "Identidad, roles y bloqueos"],
   ["/admin/finance", "Finanzas", "Tasas, beneficios y ajustes"],
@@ -36,7 +37,7 @@ export default async function AdminLayout({
             <div>
               <h1 className="text-3xl font-black">Control Center</h1>
               <p className="mt-1 text-sm text-slate-300">
-                Gobierno financiero, usuarios, contenido, pagos y seguridad.
+                Gobierno financiero, usuarios, contenido, captación, pagos y seguridad.
               </p>
             </div>
             <div className="text-right text-xs text-slate-400">
