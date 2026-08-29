@@ -9,6 +9,7 @@ import BookReaderClient from "./BookReaderClient";
 import EpubReaderClient from "./EpubReaderClient";
 import EpubAnnotationsLayer from "./EpubAnnotationsLayer";
 import EpubHeadingCenter from "./EpubHeadingCenter";
+import EpubReaderEnhancements from "./EpubReaderEnhancements";
 
 export const dynamic = "force-dynamic";
 
@@ -94,6 +95,10 @@ export default async function ReaderPage({ params }: PageProps) {
           annotationsUrl={annotationsUrl}
         />
         <EpubHeadingCenter />
+        <EpubReaderEnhancements
+          bookSlug={book.slug}
+          progressKey={progressKey}
+        />
       </div>
     );
   }
