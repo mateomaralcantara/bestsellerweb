@@ -10,6 +10,7 @@ const links = [
   ["/admin/affiliates", "Afiliados", "Aprobación, códigos y comisión"],
   ["/admin/authors", "Autores", "Aprobación y suspensión"],
   ["/admin/books", "Libros", "Precio, estado y reglas"],
+  ["/admin/epub-normalization", "EPUB Normalizer", "Optimización fixed-layout del catálogo"],
   ["/admin/purchases", "Compras", "Ventas y reembolsos"],
   ["/admin/payouts", "Retiros", "Procesar y cerrar pagos"],
   ["/admin/ledger", "Ledger", "Libro mayor financiero"],
