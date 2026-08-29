@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-type AnnotationKind = "highlight" | "comment";
+type AnnotationKind = "highlight" | "underline" | "comment";
+type SyncState = "local" | "syncing" | "cloud";
 
 type ReaderAnnotation = {
   id: string;
@@ -42,7 +43,9 @@ type HighlightWindow = Window & {
 const MAX_ANNOTATIONS = 500;
 const MAX_SELECTED_TEXT = 5000;
 const MAX_NOTE_LENGTH = 3000;
+const REMOTE_SAVE_DELAY_MS = 700;
 const HIGHLIGHT_NAME = "libroseller-reader-highlights";
+const UNDERLINE_NAME = "libroseller-reader-underlines";
 const COMMENT_NAME = "libroseller-reader-comments";
 const STYLE_ID = "libroseller-reader-annotation-style";
 
@@ -56,6 +59,84 @@ function safeId() {
   } catch {
     return `ann-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   }
+}
+
+function isAnnotationKind(value: unknown): value is AnnotationKind {
+  return value === "highlight" || value === "underline" || value === "comment";
+}
+
+function parseAnnotation(value: unknown): ReaderAnnotation | null {
+  if (!value || typeof value !== "object") return null;
+
+  const item = value as Record<string, unknown>;
+  const id = typeof item.id === "string" ? item.id.trim() : "";
+  const sectionSignature =
+    typeof item.sectionSignature === "string" ? item.sectionSignature.trim() : "";
+  const start = Number(item.start);
+  const end = Number(item.end);
+  const text = typeof item.text === "string" ? item.text.trim() : "";
+  const note = typeof item.note === "string" ? item.note : "";
+  const createdAt =
+    typeof item.createdAt === "string" && item.createdAt
+      ? item.createdAt
+      : new Date().toISOString();
+
+  if (
+    !id ||
+    !isAnnotationKind(item.kind) ||
+    !sectionSignature ||
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    end <= start ||
+    !text
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    kind: item.kind,
+    sectionSignature,
+    start,
+    end,
+    text: text.slice(0, MAX_SELECTED_TEXT),
+    note: note.slice(0, MAX_NOTE_LENGTH),
+    createdAt,
+  };
+}
+
+function annotationIdentity(item: ReaderAnnotation) {
+  return `${item.kind}:${item.sectionSignature}:${item.start}:${item.end}`;
+}
+
+function mergeAnnotations(...groups: ReaderAnnotation[][]) {
+  const byIdentity = new Map<string, ReaderAnnotation>();
+
+  for (const group of groups) {
+    for (const item of group) {
+      const key = annotationIdentity(item);
+      const previous = byIdentity.get(key);
+
+      if (!previous) {
+        byIdentity.set(key, item);
+        continue;
+      }
+
+      const previousTime = new Date(previous.createdAt).getTime();
+      const nextTime = new Date(item.createdAt).getTime();
+      if (!Number.isFinite(previousTime) || nextTime >= previousTime) {
+        byIdentity.set(key, item);
+      }
+    }
+  }
+
+  return Array.from(byIdentity.values())
+    .sort((a, b) => {
+      const aTime = new Date(a.createdAt).getTime();
+      const bTime = new Date(b.createdAt).getTime();
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+    })
+    .slice(0, MAX_ANNOTATIONS);
 }
 
 function hashText(text: string) {
@@ -169,11 +250,21 @@ function ensureAnnotationStyles(doc: Document) {
       background-color: rgba(250, 204, 21, 0.58);
       color: inherit;
     }
-    ::highlight(${COMMENT_NAME}) {
-      background-color: rgba(56, 189, 248, 0.34);
-      text-decoration: underline;
-      text-decoration-color: rgba(2, 132, 199, 0.95);
+    ::highlight(${UNDERLINE_NAME}) {
+      background-color: transparent;
+      text-decoration-line: underline;
+      text-decoration-color: rgba(16, 185, 129, 0.98);
       text-decoration-thickness: 2px;
+      text-underline-offset: 3px;
+      color: inherit;
+    }
+    ::highlight(${COMMENT_NAME}) {
+      background-color: rgba(56, 189, 248, 0.26);
+      text-decoration-line: underline;
+      text-decoration-style: dotted;
+      text-decoration-color: rgba(2, 132, 199, 0.98);
+      text-decoration-thickness: 2px;
+      text-underline-offset: 3px;
       color: inherit;
     }
   `;
@@ -202,6 +293,7 @@ function applyAnnotationsToDocument(
   );
 
   const highlightRanges: Range[] = [];
+  const underlineRanges: Range[] = [];
   const commentRanges: Range[] = [];
 
   for (const annotation of matching) {
@@ -216,16 +308,23 @@ function applyAnnotationsToDocument(
 
     if (annotation.kind === "comment") {
       commentRanges.push(range);
+    } else if (annotation.kind === "underline") {
+      underlineRanges.push(range);
     } else {
       highlightRanges.push(range);
     }
   }
 
   registry.delete(HIGHLIGHT_NAME);
+  registry.delete(UNDERLINE_NAME);
   registry.delete(COMMENT_NAME);
 
   if (highlightRanges.length > 0) {
     registry.set(HIGHLIGHT_NAME, new HighlightCtor(...highlightRanges));
+  }
+
+  if (underlineRanges.length > 0) {
+    registry.set(UNDERLINE_NAME, new HighlightCtor(...underlineRanges));
   }
 
   if (commentRanges.length > 0) {
@@ -242,33 +341,22 @@ function readAnnotations(progressKey: string): ReaderAnnotation[] {
     if (!Array.isArray(parsed)) return [];
 
     return parsed
-      .filter((item) => item && typeof item === "object")
-      .map((item): ReaderAnnotation => ({
-        id: typeof item.id === "string" ? item.id : safeId(),
-        kind: item.kind === "comment" ? "comment" : "highlight",
-        sectionSignature:
-          typeof item.sectionSignature === "string"
-            ? item.sectionSignature
-            : "",
-        start: Number(item.start),
-        end: Number(item.end),
-        text: typeof item.text === "string" ? item.text : "",
-        note: typeof item.note === "string" ? item.note : "",
-        createdAt:
-          typeof item.createdAt === "string"
-            ? item.createdAt
-            : new Date().toISOString(),
-      }))
-      .filter(
-        (item) =>
-          item.sectionSignature &&
-          Number.isFinite(item.start) &&
-          Number.isFinite(item.end) &&
-          item.end > item.start
-      )
+      .map(parseAnnotation)
+      .filter((item): item is ReaderAnnotation => Boolean(item))
       .slice(0, MAX_ANNOTATIONS);
   } catch {
     return [];
+  }
+}
+
+function writeAnnotations(progressKey: string, annotations: ReaderAnnotation[]) {
+  try {
+    localStorage.setItem(
+      storageKey(progressKey),
+      JSON.stringify(annotations.slice(0, MAX_ANNOTATIONS))
+    );
+  } catch {
+    // La sesión actual conserva las anotaciones aunque Storage esté lleno.
   }
 }
 
@@ -282,23 +370,45 @@ function clearIframeSelections() {
   });
 }
 
+function kindLabel(kind: AnnotationKind) {
+  if (kind === "comment") return "Comentario";
+  if (kind === "underline") return "Subrayado";
+  return "Resaltado";
+}
+
+function kindDotClass(kind: AnnotationKind) {
+  if (kind === "comment") return "bg-sky-400";
+  if (kind === "underline") return "bg-emerald-400";
+  return "bg-amber-300";
+}
+
 export default function EpubAnnotationsLayer({
   progressKey,
+  annotationsUrl,
 }: {
   progressKey: string;
+  annotationsUrl?: string;
 }) {
   const annotationsRef = useRef<ReaderAnnotation[]>([]);
   const attachedDocsRef = useRef(new WeakSet<Document>());
   const loadedRef = useRef(false);
+  const remoteBootFinishedRef = useRef(false);
+  const remoteDisabledRef = useRef(false);
+  const remoteSaveTimerRef = useRef<number | null>(null);
 
   const [annotations, setAnnotations] = useState<ReaderAnnotation[]>([]);
   const [pending, setPending] = useState<PendingSelection | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
+  const [syncState, setSyncState] = useState<SyncState>("local");
 
   const highlightsCount = useMemo(
     () => annotations.filter((item) => item.kind === "highlight").length,
+    [annotations]
+  );
+  const underlinesCount = useMemo(
+    () => annotations.filter((item) => item.kind === "underline").length,
     [annotations]
   );
   const commentsCount = useMemo(
@@ -318,28 +428,120 @@ export default function EpubAnnotationsLayer({
   }, []);
 
   useEffect(() => {
-    const saved = readAnnotations(progressKey);
-    annotationsRef.current = saved;
-    setAnnotations(saved);
+    let cancelled = false;
+    loadedRef.current = false;
+    remoteBootFinishedRef.current = false;
+    remoteDisabledRef.current = false;
+    setSyncState("local");
+
+    const local = readAnnotations(progressKey);
+    annotationsRef.current = local;
+    setAnnotations(local);
     loadedRef.current = true;
-  }, [progressKey]);
+
+    if (!annotationsUrl) {
+      remoteBootFinishedRef.current = true;
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void (async () => {
+      try {
+        const response = await fetch(annotationsUrl, {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+
+        if (cancelled) return;
+
+        if (!response.ok) {
+          if (response.status === 503) remoteDisabledRef.current = true;
+          remoteBootFinishedRef.current = true;
+          setSyncState("local");
+          return;
+        }
+
+        const payload = (await response.json()) as { annotations?: unknown };
+        const remote = Array.isArray(payload.annotations)
+          ? payload.annotations
+              .map(parseAnnotation)
+              .filter((item): item is ReaderAnnotation => Boolean(item))
+          : [];
+        const merged = mergeAnnotations(local, remote);
+
+        annotationsRef.current = merged;
+        setAnnotations(merged);
+        remoteBootFinishedRef.current = true;
+        setSyncState("cloud");
+      } catch {
+        if (!cancelled) {
+          remoteBootFinishedRef.current = true;
+          setSyncState("local");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [annotationsUrl, progressKey]);
 
   useEffect(() => {
     annotationsRef.current = annotations;
 
     if (loadedRef.current) {
-      try {
-        localStorage.setItem(
-          storageKey(progressKey),
-          JSON.stringify(annotations.slice(0, MAX_ANNOTATIONS))
-        );
-      } catch {
-        // La sesión actual conserva las anotaciones aunque Storage esté lleno.
-      }
+      writeAnnotations(progressKey, annotations);
     }
 
     applyEverywhere(annotations);
-  }, [annotations, applyEverywhere, progressKey]);
+
+    if (
+      !annotationsUrl ||
+      !remoteBootFinishedRef.current ||
+      remoteDisabledRef.current
+    ) {
+      return;
+    }
+
+    if (remoteSaveTimerRef.current !== null) {
+      window.clearTimeout(remoteSaveTimerRef.current);
+    }
+
+    setSyncState("syncing");
+    remoteSaveTimerRef.current = window.setTimeout(() => {
+      remoteSaveTimerRef.current = null;
+      const snapshot = annotationsRef.current.slice(0, MAX_ANNOTATIONS);
+
+      void (async () => {
+        try {
+          const response = await fetch(annotationsUrl, {
+            method: "PUT",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ annotations: snapshot }),
+          });
+
+          if (response.ok) {
+            setSyncState("cloud");
+            return;
+          }
+
+          if (response.status === 503) remoteDisabledRef.current = true;
+          setSyncState("local");
+        } catch {
+          setSyncState("local");
+        }
+      })();
+    }, REMOTE_SAVE_DELAY_MS);
+
+    return () => {
+      if (remoteSaveTimerRef.current !== null) {
+        window.clearTimeout(remoteSaveTimerRef.current);
+        remoteSaveTimerRef.current = null;
+      }
+    };
+  }, [annotations, annotationsUrl, applyEverywhere, progressKey]);
 
   useEffect(() => {
     let stopped = false;
@@ -451,13 +653,7 @@ export default function EpubAnnotationsLayer({
 
       setAnnotations((current) => {
         const withoutDuplicate = current.filter(
-          (item) =>
-            !(
-              item.sectionSignature === next.sectionSignature &&
-              item.start === next.start &&
-              item.end === next.end &&
-              item.kind === next.kind
-            )
+          (item) => annotationIdentity(item) !== annotationIdentity(next)
         );
 
         return [next, ...withoutDuplicate].slice(0, MAX_ANNOTATIONS);
@@ -476,7 +672,11 @@ export default function EpubAnnotationsLayer({
   }, []);
 
   const clearAll = useCallback(() => {
-    if (!window.confirm("¿Eliminar todos tus resaltados y comentarios de este libro?")) {
+    if (
+      !window.confirm(
+        "¿Eliminar todos tus resaltados, subrayados y comentarios de este libro?"
+      )
+    ) {
       return;
     }
     setAnnotations([]);
@@ -485,7 +685,7 @@ export default function EpubAnnotationsLayer({
   return (
     <>
       {pending ? (
-        <div className="fixed bottom-20 left-1/2 z-[90] w-[min(92vw,560px)] -translate-x-1/2 rounded-2xl border border-white/15 bg-[#07131d]/95 p-2.5 text-white shadow-2xl backdrop-blur-xl">
+        <div className="fixed bottom-20 left-1/2 z-[90] w-[min(94vw,650px)] -translate-x-1/2 rounded-2xl border border-white/15 bg-[#07131d]/95 p-2.5 text-white shadow-2xl backdrop-blur-xl">
           <p className="mb-2 line-clamp-2 text-xs leading-5 text-white/60">
             “{pending.text}”
           </p>
@@ -496,6 +696,13 @@ export default function EpubAnnotationsLayer({
               className="rounded-xl bg-amber-300 px-4 py-2 text-xs font-black text-slate-950 hover:bg-amber-200"
             >
               Resaltar
+            </button>
+            <button
+              type="button"
+              onClick={() => savePending("underline")}
+              className="rounded-xl bg-emerald-400 px-4 py-2 text-xs font-black text-slate-950 hover:bg-emerald-300"
+            >
+              Subrayar
             </button>
             <button
               type="button"
@@ -525,7 +732,7 @@ export default function EpubAnnotationsLayer({
         type="button"
         onClick={() => setPanelOpen((value) => !value)}
         className="fixed bottom-[70px] right-4 z-[75] flex items-center gap-2 rounded-2xl border border-white/15 bg-[#09131d]/95 px-4 py-2.5 text-xs font-bold text-white shadow-2xl backdrop-blur-xl hover:bg-[#102231]"
-        aria-label="Abrir resaltados y comentarios"
+        aria-label="Abrir resaltados, subrayados y comentarios"
       >
         <span aria-hidden="true">✎</span>
         <span>Notas</span>
@@ -535,18 +742,25 @@ export default function EpubAnnotationsLayer({
       </button>
 
       {panelOpen ? (
-        <aside className="fixed bottom-20 right-4 top-20 z-[80] flex w-[min(92vw,390px)] flex-col overflow-hidden rounded-3xl border border-white/15 bg-[#08131d]/98 text-white shadow-2xl backdrop-blur-xl">
+        <aside className="fixed bottom-20 right-4 top-20 z-[80] flex w-[min(94vw,410px)] flex-col overflow-hidden rounded-3xl border border-white/15 bg-[#08131d]/98 text-white shadow-2xl backdrop-blur-xl">
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-            <div>
-              <h2 className="text-sm font-black">Marcadores y comentarios</h2>
+            <div className="min-w-0">
+              <h2 className="text-sm font-black">Mis anotaciones</h2>
               <p className="mt-0.5 text-[11px] text-white/45">
-                {highlightsCount} resaltados · {commentsCount} comentarios
+                {highlightsCount} resaltados · {underlinesCount} subrayados · {commentsCount} comentarios
+              </p>
+              <p className="mt-1 text-[10px] font-semibold text-emerald-300/75">
+                {syncState === "cloud"
+                  ? "Guardado en tu cuenta"
+                  : syncState === "syncing"
+                    ? "Sincronizando…"
+                    : "Guardado localmente"}
               </p>
             </div>
             <button
               type="button"
               onClick={() => setPanelOpen(false)}
-              className="grid h-9 w-9 place-items-center rounded-xl border border-white/10 text-lg text-white/60 hover:bg-white/10"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/10 text-lg text-white/60 hover:bg-white/10"
               aria-label="Cerrar panel"
             >
               ×
@@ -557,10 +771,10 @@ export default function EpubAnnotationsLayer({
             {annotations.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-white/15 p-5 text-center">
                 <p className="text-sm font-semibold text-white/75">
-                  Aún no tienes notas
+                  Aún no tienes anotaciones
                 </p>
                 <p className="mt-2 text-xs leading-5 text-white/40">
-                  Selecciona una frase o un párrafo dentro del libro y aparecerán las opciones Resaltar y Comentar.
+                  Selecciona una frase o un párrafo dentro del libro y elige Resaltar, Subrayar o Comentar.
                 </p>
               </div>
             ) : (
@@ -572,14 +786,13 @@ export default function EpubAnnotationsLayer({
                   >
                     <div className="flex items-start gap-2">
                       <span
-                        className={`mt-1 h-3 w-3 shrink-0 rounded-full ${
-                          annotation.kind === "comment"
-                            ? "bg-sky-400"
-                            : "bg-amber-300"
-                        }`}
+                        className={`mt-1 h-3 w-3 shrink-0 rounded-full ${kindDotClass(annotation.kind)}`}
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="line-clamp-4 text-xs leading-5 text-white/75">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/35">
+                          {kindLabel(annotation.kind)}
+                        </p>
+                        <p className="mt-1 line-clamp-4 text-xs leading-5 text-white/75">
                           “{annotation.text}”
                         </p>
                         {annotation.note ? (
