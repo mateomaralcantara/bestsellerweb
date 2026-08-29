@@ -300,25 +300,52 @@ function paperRules(
     body: {
       color: "#172033 !important",
       background: "#fffdf8 !important",
+      "text-align": "center !important",
       "text-rendering": "optimizeLegibility !important",
       "-webkit-font-smoothing": "antialiased !important",
     },
+    "h1, h2, h3, h4, h5, h6": {
+      "text-align": "center !important",
+      "margin-left": "auto !important",
+      "margin-right": "auto !important",
+    },
     "p, li, blockquote": {
+      "text-align": "center !important",
       orphans: "2 !important",
       widows: "2 !important",
+    },
+    "ul, ol": {
+      "list-style-position": "inside !important",
+      "padding-left": "0 !important",
+      "text-align": "center !important",
+    },
+    "figure, figcaption": {
+      "text-align": "center !important",
+      "margin-left": "auto !important",
+      "margin-right": "auto !important",
     },
     "img, svg, video, canvas": {
       "max-width": "100% !important",
       height: "auto !important",
       "object-fit": "contain !important",
+      display: "block !important",
+      "margin-left": "auto !important",
+      "margin-right": "auto !important",
     },
     table: {
       "max-width": "100% !important",
       "border-collapse": "collapse !important",
+      "margin-left": "auto !important",
+      "margin-right": "auto !important",
+      "text-align": "center !important",
+    },
+    "th, td": {
+      "text-align": "center !important",
     },
     "pre, code": {
       "white-space": "pre-wrap !important",
       "overflow-wrap": "anywhere !important",
+      "text-align": "center !important",
     },
   };
 }
@@ -734,7 +761,9 @@ export default function EpubReaderClient({
 
       try {
         const advance =
-          direction === "next" ? rendition.next.bind(rendition) : rendition.prev.bind(rendition);
+          direction === "next"
+            ? rendition.next.bind(rendition)
+            : rendition.prev.bind(rendition);
 
         await advance();
 
@@ -763,13 +792,13 @@ export default function EpubReaderClient({
           ‹
         </a>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">
+        <div className="min-w-0 flex-1 text-center">
+          <div className="flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">
             <span>{mode === "preview" ? "Muestra EPUB" : "EPUB"}</span>
             <span className="text-white/30">·</span>
             <span className="truncate text-white/40">{locationLabel}</span>
           </div>
-          <h1 className="mt-0.5 truncate text-sm font-semibold text-white/95 sm:text-[15px]">
+          <h1 className="mt-0.5 truncate text-center text-sm font-semibold text-white/95 sm:text-[15px]">
             {title}
           </h1>
         </div>
