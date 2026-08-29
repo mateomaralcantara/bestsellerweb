@@ -4,6 +4,7 @@ import BookReaderClient from "@/app/reader/[slug]/BookReaderClient";
 import EpubReaderClient from "@/app/reader/[slug]/EpubReaderClient";
 import EpubHeadingCenter from "@/app/reader/[slug]/EpubHeadingCenter";
 import PreviewTelemetry from "./PreviewTelemetry";
+import PreviewSubscriberGate from "./PreviewSubscriberGate";
 
 export const dynamic = "force-dynamic";
 
@@ -124,6 +125,12 @@ export default async function CatalogPreviewPage({
         />
         <EpubHeadingCenter />
         <PreviewTelemetry bookSlug={book.slug} progressKey={progressKey} />
+        <PreviewSubscriberGate
+          bookSlug={book.slug}
+          bookTitle={book.title}
+          progressKey={progressKey}
+          readerKind="epub"
+        />
       </div>
     );
   }
@@ -180,6 +187,12 @@ export default async function CatalogPreviewPage({
         mode="preview"
       />
       <PreviewTelemetry bookSlug={book.slug} progressKey={progressKey} />
+      <PreviewSubscriberGate
+        bookSlug={book.slug}
+        bookTitle={book.title}
+        progressKey={progressKey}
+        readerKind="pages"
+      />
     </div>
   );
 }
