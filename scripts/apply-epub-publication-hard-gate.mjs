@@ -90,3 +90,16 @@ patchFile("app/api/books/[bookkey]/epub-upload/route.ts", [
     after: `      normalization: {\n        status: normalization.status,\n        optimized: normalization.optimized,\n        report: normalization.report,\n        warning: normalization.error || null,\n      },\n      publicationGate: {\n        ready: false,\n        status: "editorial_review",\n        reason: "epub_replaced",\n        requiresQualityGate: true,\n        bookStatus: access.book.status === "published" ? "under_review" : access.book.status,\n      },\n    });`,
   },
 ]);
+
+patchFile("app/api/admin/control/route.ts", [
+  {
+    label: "import publication gate admin",
+    before: `import { refundPayPalCapture } from "@/lib/paypal/admin-refund";\n`,
+    after: `import { refundPayPalCapture } from "@/lib/paypal/admin-refund";\nimport { getEpubPublicationGate } from "@/lib/epub-publication-gate";\n`,
+  },
+  {
+    label: "admin publication gate",
+    before: `  const before = await selectOne("books", "id", bookId);\n  if (!before) throw new AdminAccessError("Libro no encontrado.", 404);\n\n  const roundedPrice = Math.round(paypalPrice * 100) / 100;`,
+    after: `  const before = await selectOne("books", "id", bookId);\n  if (!before) throw new AdminAccessError("Libro no encontrado.", 404);\n\n  if (status === "published" && before.status !== "published") {\n    const publicationGate = await getEpubPublicationGate(bookId);\n    if (!publicationGate.ready) {\n      throw new AdminAccessError(publicationGate.message, 409);\n    }\n  }\n\n  const roundedPrice = Math.round(paypalPrice * 100) / 100;`,
+  },
+]);
