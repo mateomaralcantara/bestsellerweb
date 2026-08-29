@@ -55,6 +55,17 @@ function normalizeSingleImagePage(doc: Document) {
     (doc.head || doc.documentElement).appendChild(style);
   }
 
+  body.style.setProperty("margin", "0", "important");
+  body.style.setProperty("padding", "0", "important");
+  body.style.setProperty("width", "100%", "important");
+  body.style.setProperty("height", "100%", "important");
+  body.style.setProperty("max-width", "none", "important");
+  body.style.setProperty("max-height", "none", "important");
+  body.style.setProperty("overflow", "hidden", "important");
+  body.style.setProperty("display", "flex", "important");
+  body.style.setProperty("align-items", "center", "important");
+  body.style.setProperty("justify-content", "center", "important");
+
   const image = images[0];
   let ancestor = image.parentElement;
 
