@@ -4,6 +4,7 @@ import { requireAdminRolePage } from "@/lib/admin/superadmin";
 
 const links = [
   ["/admin", "Centro de mando", "Resumen ejecutivo"],
+  ["/admin/observability", "Observabilidad", "SLO, salud y señales críticas"],
   ["/admin/users", "Usuarios", "Identidad, roles y bloqueos"],
   ["/admin/finance", "Finanzas", "Tasas, beneficios y ajustes"],
   ["/admin/affiliates", "Afiliados", "Aprobación, códigos y comisión"],

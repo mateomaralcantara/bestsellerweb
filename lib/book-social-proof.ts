@@ -1,5 +1,5 @@
-export const DEFAULT_BOOK_DISPLAY_RATING = 4.6;
-export const DEFAULT_BOOK_DISPLAY_SALES_COUNT = 2000;
+export const DEFAULT_BOOK_DISPLAY_RATING = 0;
+export const DEFAULT_BOOK_DISPLAY_SALES_COUNT = 0;
 
 export type BookSocialProof = {
   rating: number;
@@ -52,10 +52,10 @@ export function getBookSocialProof(
 
   return {
     rating: normalizeDisplayRating(
-      safeMetadata.display_rating ?? safeMetadata.rating
+      safeMetadata.verified_rating ?? safeMetadata.rating
     ),
     salesCount: normalizeDisplaySalesCount(
-      safeMetadata.display_sales_count ?? safeMetadata.sales_count
+      safeMetadata.verified_sales_count ?? safeMetadata.sales_count
     ),
   };
 }
@@ -66,8 +66,8 @@ export function mergeBookSocialProofMetadata(
 ): Record<string, unknown> {
   return {
     ...(metadata ?? {}),
-    display_rating: normalizeDisplayRating(socialProof.rating),
-    display_sales_count: normalizeDisplaySalesCount(socialProof.salesCount),
-    display_metrics_source: "promotional",
+    verified_rating: normalizeDisplayRating(socialProof.rating),
+    verified_sales_count: normalizeDisplaySalesCount(socialProof.salesCount),
+    display_metrics_source: "verified",
   };
 }

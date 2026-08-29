@@ -86,6 +86,13 @@ type EditionRow = {
   sort_order?: number | null;
 };
 
+type VerifiedMetricRow = {
+  book_id: string;
+  verified_rating?: number | string | null;
+  verified_sales_count?: number | string | null;
+  review_count?: number | string | null;
+};
+
 function normalizeText(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
@@ -174,11 +181,18 @@ function resolveEditionPrice(edition: EditionRow | null) {
   };
 }
 
-function normalizeBook(row: BookRow, edition: EditionRow | null = null): Book {
+function normalizeBook(
+  row: BookRow,
+  edition: EditionRow | null = null,
+  verifiedMetrics: VerifiedMetricRow | null = null
+): Book {
   const longDescription = normalizeText(row.description_long);
   const pricing = resolveEditionPrice(edition);
   const format = normalizeFormat(edition?.format);
-  const socialProof = getBookSocialProof(row.metadata);
+  const metadataProof = getBookSocialProof(row.metadata);
+  const verifiedRating = normalizeNumber(verifiedMetrics?.verified_rating);
+  const verifiedSales = normalizeNumber(verifiedMetrics?.verified_sales_count);
+  const verifiedReviews = normalizeNumber(verifiedMetrics?.review_count);
 
   const shortDescription =
     normalizeText(row.description_short) ||
@@ -210,9 +224,9 @@ function normalizeBook(row: BookRow, edition: EditionRow | null = null): Book {
     price: pricing.price,
     compare_at_price: pricing.compareAtPrice,
     currency: pricing.currency,
-    rating: socialProof.rating,
-    review_count: 0,
-    sales_count: socialProof.salesCount,
+    rating: verifiedRating ?? metadataProof.rating,
+    review_count: verifiedReviews ?? 0,
+    sales_count: verifiedSales ?? metadataProof.salesCount,
     formats: format ? [format] : [],
     categories: [],
     badge: null,
@@ -276,6 +290,31 @@ async function getActiveEditionMap(
   return editionsByBook;
 }
 
+async function getVerifiedMetricsMap(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  bookIds: string[]
+) {
+  const metricsByBook = new Map<string, VerifiedMetricRow>();
+  if (bookIds.length === 0) return metricsByBook;
+
+  const { data, error } = await supabase
+    .from("book_verified_metrics")
+    .select("book_id, verified_rating, verified_sales_count, review_count")
+    .in("book_id", bookIds);
+
+  if (error) {
+    // Compatibilidad durante el despliegue previo a aplicar la migración 9.x.
+    console.warn("GETBOOKS VERIFIED METRICS:", error.message);
+    return metricsByBook;
+  }
+
+  for (const row of (data ?? []) as VerifiedMetricRow[]) {
+    metricsByBook.set(row.book_id, row);
+  }
+
+  return metricsByBook;
+}
+
 export const getBooks = cache(async (): Promise<Book[]> => {
   const supabase = await createClient();
 
@@ -296,13 +335,18 @@ export const getBooks = cache(async (): Promise<Book[]> => {
   }
 
   const rows = (data ?? []) as BookRow[];
-  const editionsByBook = await getActiveEditionMap(
-    supabase,
-    rows.map((book) => book.id)
-  );
+  const ids = rows.map((book) => book.id);
+  const [editionsByBook, metricsByBook] = await Promise.all([
+    getActiveEditionMap(supabase, ids),
+    getVerifiedMetricsMap(supabase, ids),
+  ]);
 
   return rows.map((book) =>
-    normalizeBook(book, editionsByBook.get(book.id) ?? null)
+    normalizeBook(
+      book,
+      editionsByBook.get(book.id) ?? null,
+      metricsByBook.get(book.id) ?? null
+    )
   );
 });
 
@@ -336,9 +380,16 @@ export const getBookBySlug = cache(async (slug: string): Promise<Book | null> =>
   }
 
   const row = data as BookRow;
-  const editionsByBook = await getActiveEditionMap(supabase, [row.id]);
+  const [editionsByBook, metricsByBook] = await Promise.all([
+    getActiveEditionMap(supabase, [row.id]),
+    getVerifiedMetricsMap(supabase, [row.id]),
+  ]);
 
-  return normalizeBook(row, editionsByBook.get(row.id) ?? null);
+  return normalizeBook(
+    row,
+    editionsByBook.get(row.id) ?? null,
+    metricsByBook.get(row.id) ?? null
+  );
 });
 
 export const getBookCategories = cache(async (): Promise<string[]> => {
