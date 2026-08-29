@@ -2,23 +2,16 @@ import { NextResponse } from "next/server";
 import JSZip from "jszip";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { getCurrentBookNormalization } from "@/lib/epub-normalization-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// En EPUB reflowable no existen paginas fisicas estables: la paginacion depende
-// del tamano de pantalla y de la tipografia. Para una muestra segura usamos las
-// primeras 25 secciones XHTML legibles del spine. En EPUB fixed-layout suele
-// equivaler directamente a las primeras 25 paginas.
 const PREVIEW_SPINE_LIMIT = 25;
 
-type RouteContext = {
-  params: Promise<{
-    bookkey: string;
-  }>;
-};
-
+type RouteContext = { params: Promise<{ bookkey: string }> };
 type ReadMode = "preview" | "full";
+type EpubVariant = "auto" | "original" | "optimized";
 
 type BookRecord = {
   id: string;
@@ -46,13 +39,7 @@ type ManifestItem = {
 };
 
 function jsonError(message: string, status = 400) {
-  return NextResponse.json(
-    {
-      ok: false,
-      error: message,
-    },
-    { status }
-  );
+  return NextResponse.json({ ok: false, error: message }, { status });
 }
 
 function safeBookKey(value: string) {
@@ -64,14 +51,17 @@ function safeBookKey(value: string) {
 }
 
 function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    value
-  );
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function getReadMode(request: Request): ReadMode {
-  const url = new URL(request.url);
-  return url.searchParams.get("mode") === "full" ? "full" : "preview";
+  return new URL(request.url).searchParams.get("mode") === "full" ? "full" : "preview";
+}
+
+function getVariant(request: Request): EpubVariant {
+  const value = new URL(request.url).searchParams.get("variant");
+  if (value === "original" || value === "optimized") return value;
+  return "auto";
 }
 
 function safeFileName(title: string | null) {
@@ -85,7 +75,6 @@ function safeFileName(title: string | null) {
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "")
       .toLowerCase() || "libro";
-
   return `${clean}.epub`;
 }
 
@@ -94,52 +83,55 @@ async function getBookByKey(bookkey: string) {
     .from("books")
     .select("id, title, slug, status, owner_user_id")
     .limit(1);
-
   const { data, error } = isUuid(bookkey)
     ? await query.eq("id", bookkey).maybeSingle<BookRecord>()
     : await query.eq("slug", bookkey).maybeSingle<BookRecord>();
-
-  if (error) {
-    throw new Error(`Error buscando libro: ${error.message}`);
-  }
-
+  if (error) throw new Error(`Error buscando libro: ${error.message}`);
   return data;
 }
 
-async function getAsset(bookId: string, assetType: "epub") {
+async function getOriginalAsset(bookId: string) {
   const { data, error } = await supabaseAdmin
     .from("book_assets")
-    .select(
-      "id, asset_type, storage_bucket, storage_path, file_url, mime_type, sort_order"
-    )
+    .select("id, asset_type, storage_bucket, storage_path, file_url, mime_type, sort_order")
     .eq("book_id", bookId)
-    .eq("asset_type", assetType)
+    .eq("asset_type", "epub")
     .order("sort_order", { ascending: true })
     .limit(1)
     .maybeSingle<BookAsset>();
+  if (error) throw new Error(`Error buscando asset epub: ${error.message}`);
+  return data;
+}
 
-  if (error) {
-    throw new Error(`Error buscando asset ${assetType}: ${error.message}`);
+async function resolveServingAsset(bookId: string, original: BookAsset, variant: EpubVariant) {
+  if (variant === "original") return { asset: original, servedVariant: "original" as const };
+
+  const normalization = await getCurrentBookNormalization(bookId);
+  if (
+    normalization?.status === "normalized" &&
+    normalization.storage_bucket &&
+    normalization.storage_path
+  ) {
+    return {
+      asset: {
+        ...original,
+        id: `normalization:${normalization.id}`,
+        asset_type: "epub_optimized",
+        storage_bucket: String(normalization.storage_bucket),
+        storage_path: String(normalization.storage_path),
+      } satisfies BookAsset,
+      servedVariant: "optimized" as const,
+    };
   }
 
-  return data;
+  return { asset: original, servedVariant: variant === "optimized" ? "original-fallback" as const : "original" as const };
 }
 
 async function userCanReadFullBook(book: BookRecord) {
   const supabase = await createClient();
-
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    return false;
-  }
-
-  if (book.owner_user_id === user.id) {
-    return true;
-  }
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) return false;
+  if (book.owner_user_id === user.id) return true;
 
   const { data: purchase, error: purchaseError } = await supabaseAdmin
     .from("book_purchases")
@@ -149,12 +141,10 @@ async function userCanReadFullBook(book: BookRecord) {
     .in("status", ["paid", "completed", "approved", "succeeded"])
     .limit(1)
     .maybeSingle();
-
   if (purchaseError) {
     console.error("Error verificando compra EPUB full:", purchaseError.message);
     return false;
   }
-
   return Boolean(purchase);
 }
 
@@ -162,48 +152,32 @@ async function downloadEpubAsset(asset: BookAsset) {
   if (!asset.storage_bucket || !asset.storage_path) {
     throw new Error("El asset EPUB no tiene bucket o ruta de Storage.");
   }
-
   const { data: file, error } = await supabaseAdmin.storage
     .from(asset.storage_bucket)
     .download(asset.storage_path);
-
   if (error || !file) {
-    throw new Error(
-      error?.message || "No se pudo descargar el EPUB desde Storage."
-    );
+    throw new Error(error?.message || "No se pudo descargar el EPUB desde Storage.");
   }
-
   const arrayBuffer = await file.arrayBuffer();
-
-  if (!arrayBuffer || arrayBuffer.byteLength <= 0) {
-    throw new Error("El EPUB descargado esta vacio.");
-  }
-
+  if (!arrayBuffer || arrayBuffer.byteLength <= 0) throw new Error("El EPUB descargado esta vacio.");
   return arrayBuffer;
 }
 
 function attr(source: string, name: string) {
-  const match = source.match(
-    new RegExp(`${name}\\s*=\\s*["']([^"']+)["']`, "i")
-  );
-  return match?.[1]?.trim() || "";
+  return source.match(new RegExp(`${name}\\s*=\\s*["']([^"']+)["']`, "i"))?.[1]?.trim() || "";
 }
 
 function normalizeZipPath(baseDir: string, href: string) {
   const parts = `${baseDir}/${href}`.replace(/\\/g, "/").split("/");
   const stack: string[] = [];
-
   for (const part of parts) {
     if (!part || part === ".") continue;
-
     if (part === "..") {
       if (stack.length > 0) stack.pop();
       continue;
     }
-
     stack.push(part);
   }
-
   return stack.join("/");
 }
 
@@ -213,121 +187,66 @@ function isHtmlMedia(mediaType: string) {
 
 function isNavigationItem(item: ManifestItem) {
   if (/\bnav\b/i.test(item.properties)) return true;
-
   const href = item.href.toLowerCase().split("#")[0];
-  return (
-    href.endsWith("nav.xhtml") ||
-    href.endsWith("nav.html") ||
-    href.endsWith("toc.xhtml") ||
-    href.endsWith("toc.html")
-  );
+  return href.endsWith("nav.xhtml") || href.endsWith("nav.html") || href.endsWith("toc.xhtml") || href.endsWith("toc.html");
 }
 
 async function buildSafePreviewEpub(arrayBuffer: ArrayBuffer): Promise<ArrayBuffer> {
   const zip = await JSZip.loadAsync(arrayBuffer);
   const containerFile = zip.file("META-INF/container.xml");
-
-  if (!containerFile) {
-    throw new Error("EPUB invalido: falta META-INF/container.xml.");
-  }
+  if (!containerFile) throw new Error("EPUB invalido: falta META-INF/container.xml.");
 
   const containerXml = await containerFile.async("string");
-  const opfPath =
-    containerXml.match(/full-path\s*=\s*["']([^"']+)["']/i)?.[1]?.trim() || "";
-
-  if (!opfPath) {
-    throw new Error("EPUB invalido: no se encontro el OPF.");
-  }
-
+  const opfPath = containerXml.match(/full-path\s*=\s*["']([^"']+)["']/i)?.[1]?.trim() || "";
+  if (!opfPath) throw new Error("EPUB invalido: no se encontro el OPF.");
   const opfFile = zip.file(opfPath);
-
-  if (!opfFile) {
-    throw new Error("EPUB invalido: el OPF no existe en el ZIP.");
-  }
+  if (!opfFile) throw new Error("EPUB invalido: el OPF no existe en el ZIP.");
 
   const opf = await opfFile.async("string");
-  const opfDir = opfPath.includes("/")
-    ? opfPath.slice(0, opfPath.lastIndexOf("/"))
-    : "";
-
-  const manifestItems: ManifestItem[] = Array.from(
-    opf.matchAll(/<item\b[^>]*\/?\s*>/gi)
-  ).map((match) => ({
+  const opfDir = opfPath.includes("/") ? opfPath.slice(0, opfPath.lastIndexOf("/")) : "";
+  const manifestItems: ManifestItem[] = Array.from(opf.matchAll(/<item\b[^>]*\/?\s*>/gi)).map((match) => ({
     id: attr(match[0], "id"),
     href: attr(match[0], "href"),
     mediaType: attr(match[0], "media-type"),
     properties: attr(match[0], "properties"),
   }));
-
-  const manifestById = new Map(
-    manifestItems.filter((item) => item.id).map((item) => [item.id, item])
-  );
-
+  const manifestById = new Map(manifestItems.filter((item) => item.id).map((item) => [item.id, item]));
   const spineRefs = Array.from(opf.matchAll(/<itemref\b[^>]*\/?\s*>/gi))
-    .map((match) => ({
-      raw: match[0],
-      idref: attr(match[0], "idref"),
-      linear: attr(match[0], "linear"),
-    }))
+    .map((match) => ({ raw: match[0], idref: attr(match[0], "idref"), linear: attr(match[0], "linear") }))
     .filter((item) => item.idref);
-
   const readableSpine = spineRefs.filter((ref) => {
     const item = manifestById.get(ref.idref);
-
-    if (!item) return false;
-    if (ref.linear.toLowerCase() === "no") return false;
-    if (!isHtmlMedia(item.mediaType)) return false;
-    if (isNavigationItem(item)) return false;
-
-    return true;
+    return Boolean(item && ref.linear.toLowerCase() !== "no" && isHtmlMedia(item.mediaType) && !isNavigationItem(item));
   });
+  const keptIds = new Set(readableSpine.slice(0, PREVIEW_SPINE_LIMIT).map((item) => item.idref));
+  if (keptIds.size === 0) throw new Error("EPUB invalido: no hay secciones legibles para preview.");
 
-  const keptIds = new Set(
-    readableSpine.slice(0, PREVIEW_SPINE_LIMIT).map((item) => item.idref)
-  );
-
-  if (keptIds.size === 0) {
-    throw new Error("EPUB invalido: no hay secciones legibles para preview.");
-  }
-
-  let nextOpf = opf.replace(/<itemref\b[^>]*\/?\s*>/gi, (raw) => {
-    const idref = attr(raw, "idref");
-    return keptIds.has(idref) ? raw : "";
-  });
-
+  let nextOpf = opf.replace(/<itemref\b[^>]*\/?\s*>/gi, (raw) => keptIds.has(attr(raw, "idref")) ? raw : "");
   nextOpf = nextOpf.replace(/<item\b[^>]*\/?\s*>/gi, (raw) => {
-    const id = attr(raw, "id");
-    const mediaType = attr(raw, "media-type");
-    const properties = attr(raw, "properties");
-    const href = attr(raw, "href");
-
-    if (!isHtmlMedia(mediaType)) return raw;
-
-    const item: ManifestItem = { id, href, mediaType, properties };
-    if (isNavigationItem(item)) return raw;
-
-    return keptIds.has(id) ? raw : "";
+    const item: ManifestItem = {
+      id: attr(raw, "id"),
+      href: attr(raw, "href"),
+      mediaType: attr(raw, "media-type"),
+      properties: attr(raw, "properties"),
+    };
+    if (!isHtmlMedia(item.mediaType) || isNavigationItem(item)) return raw;
+    return keptIds.has(item.id) ? raw : "";
   });
 
   for (const item of manifestItems) {
-    if (!isHtmlMedia(item.mediaType)) continue;
-    if (isNavigationItem(item)) continue;
-    if (keptIds.has(item.id)) continue;
-
+    if (!isHtmlMedia(item.mediaType) || isNavigationItem(item) || keptIds.has(item.id)) continue;
     const zipPath = normalizeZipPath(opfDir, item.href.split("#")[0]);
     if (zipPath) zip.remove(zipPath);
   }
 
   zip.file(opfPath, nextOpf);
   zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
-
   const result = await zip.generateAsync({
     type: "uint8array",
     compression: "DEFLATE",
     compressionOptions: { level: 6 },
     mimeType: "application/epub+zip",
   });
-
   const exact = new Uint8Array(result.byteLength);
   exact.set(result);
   return exact.buffer;
@@ -336,32 +255,19 @@ async function buildSafePreviewEpub(arrayBuffer: ArrayBuffer): Promise<ArrayBuff
 export async function GET(request: Request, { params }: RouteContext) {
   try {
     const bookkey = safeBookKey((await params).bookkey);
-
-    if (!bookkey) {
-      return jsonError("Identificador de libro invalido.", 400);
-    }
+    if (!bookkey) return jsonError("Identificador de libro invalido.", 400);
 
     const mode = getReadMode(request);
+    const requestedVariant = getVariant(request);
     const book = await getBookByKey(bookkey);
+    if (!book) return jsonError("Libro no encontrado.", 404);
 
-    if (!book) {
-      return jsonError("Libro no encontrado.", 404);
+    if (mode === "full" && !(await userCanReadFullBook(book))) {
+      return jsonError("Debes comprar este libro para leerlo completo.", 403);
     }
 
-    if (mode === "full") {
-      const canRead = await userCanReadFullBook(book);
-
-      if (!canRead) {
-        return jsonError("Debes comprar este libro para leerlo completo.", 403);
-      }
-    }
-
-    // Una sola fuente de verdad: el preview SIEMPRE se deriva del EPUB completo
-    // actual. Asi, al reemplazar el EPUB completo, la muestra cambia de inmediato
-    // y nunca puede quedar apuntando a un epub_preview viejo.
-    const asset = await getAsset(book.id, "epub");
-
-    if (!asset) {
+    const original = await getOriginalAsset(book.id);
+    if (!original) {
       return jsonError(
         mode === "preview"
           ? "Este libro no tiene EPUB completo disponible para generar la muestra."
@@ -370,10 +276,9 @@ export async function GET(request: Request, { params }: RouteContext) {
       );
     }
 
-    const fullEpub = await downloadEpubAsset(asset);
-    const payload =
-      mode === "preview" ? await buildSafePreviewEpub(fullEpub) : fullEpub;
-
+    const resolved = await resolveServingAsset(book.id, original, requestedVariant);
+    const fullEpub = await downloadEpubAsset(resolved.asset);
+    const payload = mode === "preview" ? await buildSafePreviewEpub(fullEpub) : fullEpub;
     const fileName = safeFileName(book.title);
 
     return new NextResponse(payload, {
@@ -384,11 +289,12 @@ export async function GET(request: Request, { params }: RouteContext) {
         "Content-Disposition": `inline; filename="${fileName}"`,
         "Cache-Control": "private, no-store, max-age=0",
         "X-Content-Type-Options": "nosniff",
+        "X-LibroSeller-Epub-Variant": resolved.servedVariant,
+        "X-LibroSeller-Epub-Requested-Variant": requestedVariant,
       },
     });
   } catch (error) {
     console.error("GET /api/books/[bookkey]/epub error:", error);
-
     return jsonError("Error interno cargando EPUB.", 500);
   }
 }
