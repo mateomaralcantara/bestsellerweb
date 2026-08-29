@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import BookReaderClient from "@/app/reader/[slug]/BookReaderClient";
 import EpubReaderClient from "@/app/reader/[slug]/EpubReaderClient";
+import EpubHeadingCenter from "@/app/reader/[slug]/EpubHeadingCenter";
 
 export const dynamic = "force-dynamic";
 
@@ -109,7 +110,10 @@ export default async function CatalogPreviewPage({
   // vista cambia automaticamente sin depender de un epub_preview antiguo.
   if (await hasFullEpub(book.id)) {
     return (
-      <div className="h-[100dvh] overflow-hidden bg-[#071018]">
+      <div
+        data-libroseller-epub-reader="true"
+        className="h-[100dvh] overflow-hidden bg-[#071018]"
+      >
         <EpubReaderClient
           title={book.title}
           epubUrl={`/api/books/${encodeURIComponent(book.slug)}/epub?mode=preview`}
@@ -119,6 +123,7 @@ export default async function CatalogPreviewPage({
           purchaseUrl={`/checkout/paypal?bookId=${encodeURIComponent(book.id)}`}
           mode="preview"
         />
+        <EpubHeadingCenter />
       </div>
     );
   }
