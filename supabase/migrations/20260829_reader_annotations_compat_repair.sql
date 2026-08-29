@@ -38,15 +38,18 @@ alter table public.reader_annotations
   alter column created_at set default now(),
   alter column updated_at set default now();
 
+-- IMPORTANTE: instalaciones antiguas pueden tener id como uuid. Se convierte a
+-- texto únicamente para construir la firma legacy y evitar que PostgreSQL intente
+-- convertir '' a uuid dentro de COALESCE.
 update public.reader_annotations
 set
-  kind = coalesce(nullif(kind, ''), 'highlight'),
+  kind = coalesce(nullif(kind::text, ''), 'highlight'),
   section_signature = coalesce(
     nullif(section_signature, ''),
     'legacy:' || md5(
       coalesce(user_id::text, '') || ':' ||
       coalesce(book_id::text, '') || ':' ||
-      coalesce(id, '') || ':' ||
+      coalesce(id::text, '') || ':' ||
       coalesce(created_at::text, '')
     )
   ),
