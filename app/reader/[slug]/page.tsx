@@ -67,7 +67,9 @@ export default async function ReaderPage({ params }: PageProps) {
     notFound();
   }
 
-  const progressUrl = `/api/books/${encodeURIComponent(book.slug)}/progress`;
+  const encodedSlug = encodeURIComponent(book.slug);
+  const progressUrl = `/api/books/${encodedSlug}/progress`;
+  const annotationsUrl = `/api/books/${encodedSlug}/annotations`;
 
   if (readerAsset.readerFormat === "epub") {
     const progressKey = `full:${book.slug}:epub`;
@@ -76,14 +78,17 @@ export default async function ReaderPage({ params }: PageProps) {
       <div className="h-[100dvh] overflow-hidden bg-[#071018]">
         <EpubReaderClient
           title={book.title}
-          epubUrl={`/api/books/${encodeURIComponent(book.slug)}/epub?mode=full`}
+          epubUrl={`/api/books/${encodedSlug}/epub?mode=full`}
           progressUrl={progressUrl}
           progressKey={progressKey}
           exitUrl="/dashboard/books/purchased"
           exitLabel="Volver a mi biblioteca"
           mode="full"
         />
-        <EpubAnnotationsLayer progressKey={progressKey} />
+        <EpubAnnotationsLayer
+          progressKey={progressKey}
+          annotationsUrl={annotationsUrl}
+        />
       </div>
     );
   }
@@ -93,7 +98,7 @@ export default async function ReaderPage({ params }: PageProps) {
       <BookReaderClient
         title={book.title}
         coverUrl={book.cover_url}
-        pdfUrl={`/api/books/${encodeURIComponent(book.slug)}/read`}
+        pdfUrl={`/api/books/${encodedSlug}/read`}
         progressUrl={progressUrl}
         progressKey={`full:${book.slug}:pdf`}
       />
