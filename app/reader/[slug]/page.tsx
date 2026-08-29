@@ -8,6 +8,7 @@ import {
 import BookReaderClient from "./BookReaderClient";
 import EpubReaderClient from "./EpubReaderClient";
 import EpubAnnotationsLayer from "./EpubAnnotationsLayer";
+import EpubFixedLayoutGuard from "./EpubFixedLayoutGuard";
 import EpubHeadingCenter from "./EpubHeadingCenter";
 import EpubReaderEnhancements from "./EpubReaderEnhancements";
 
@@ -90,6 +91,7 @@ export default async function ReaderPage({ params }: PageProps) {
           exitLabel="Volver a mi biblioteca"
           mode="full"
         />
+        <EpubFixedLayoutGuard />
         <EpubAnnotationsLayer
           progressKey={progressKey}
           annotationsUrl={annotationsUrl}
