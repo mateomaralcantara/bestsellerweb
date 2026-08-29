@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { BookOpen, Mail, MessageCircle, Sparkles } from "lucide-react";
 
 type ReaderKind = "epub" | "pages";
@@ -21,8 +21,11 @@ type ApiResponse = {
 
 const SUBSCRIBER_TOKEN_KEY = "libroseller:preview-subscriber-token:v1";
 const GATE_PAGE = 6;
-const EPUB_GATE_PERCENT = 20;
-const POLL_MS = 450;
+const POLL_MS = 250;
+
+function epubPageKey(progressKey: string) {
+  return `libroseller:epub-preview-page:${progressKey}`;
+}
 
 function readToken() {
   try {
@@ -48,6 +51,26 @@ function clearToken() {
   }
 }
 
+function readEpubPage(progressKey: string) {
+  try {
+    const value = Number(window.localStorage.getItem(epubPageKey(progressKey)));
+    return Number.isFinite(value) && value >= 1 ? Math.round(value) : 1;
+  } catch {
+    return 1;
+  }
+}
+
+function writeEpubPage(progressKey: string, page: number) {
+  try {
+    window.localStorage.setItem(
+      epubPageKey(progressKey),
+      String(Math.max(1, Math.round(page)))
+    );
+  } catch {
+    // El contador en memoria del lector sigue funcionando durante la sesión.
+  }
+}
+
 function pageReaderHasCrossedGate(progressKey: string) {
   try {
     const raw = window.localStorage.getItem(
@@ -64,16 +87,7 @@ function pageReaderHasCrossedGate(progressKey: string) {
 }
 
 function epubReaderHasCrossedGate(progressKey: string) {
-  try {
-    const raw = window.localStorage.getItem(`libroseller:epub:${progressKey}`);
-    if (!raw) return false;
-
-    const parsed = JSON.parse(raw) as { percent?: unknown };
-    const percent = Number(parsed.percent);
-    return Number.isFinite(percent) && percent >= EPUB_GATE_PERCENT;
-  } catch {
-    return false;
-  }
+  return readEpubPage(progressKey) >= GATE_PAGE;
 }
 
 async function postSubscription(payload: Record<string, unknown>) {
@@ -103,6 +117,35 @@ export default function PreviewSubscriberGate({
   const [knownSubscriber, setKnownSubscriber] = useState(false);
   const handledThresholdRef = useRef(false);
   const knownTokenRef = useRef("");
+  const epubPageRef = useRef(1);
+
+  useEffect(() => {
+    if (readerKind !== "epub") return;
+
+    epubPageRef.current = readEpubPage(progressKey);
+    writeEpubPage(progressKey, epubPageRef.current);
+
+    const onReaderNavigation = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const button = target.closest<HTMLButtonElement>("button[aria-label]");
+      if (!button) return;
+
+      const label = button.getAttribute("aria-label") || "";
+      if (label !== "Página siguiente" && label !== "Página anterior") return;
+      if (button.disabled) return;
+
+      epubPageRef.current = Math.max(
+        1,
+        epubPageRef.current + (label === "Página siguiente" ? 1 : -1)
+      );
+      writeEpubPage(progressKey, epubPageRef.current);
+    };
+
+    document.addEventListener("click", onReaderNavigation, true);
+    return () => document.removeEventListener("click", onReaderNavigation, true);
+  }, [progressKey, readerKind]);
 
   useEffect(() => {
     let cancelled = false;
