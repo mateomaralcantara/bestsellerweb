@@ -20,7 +20,7 @@ const ALLOWED_MIME_TYPES = new Set([
 ]);
 
 type RouteContext = { params: Promise<{ bookkey: string }> };
-type OwnedBook = { id: string; slug: string; owner_user_id: string };
+type OwnedBook = { id: string; slug: string; owner_user_id: string; status: string };
 type EditionRow = { id: string };
 type ExistingAsset = { id: string; storage_bucket: string | null; storage_path: string | null };
 
@@ -57,7 +57,7 @@ async function getOwnedBook(bookkey: string) {
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   if (userError || !user) return { user: null, book: null, error: jsonError("No autorizado.", 401) };
 
-  let query = supabaseAdmin.from("books").select("id, slug, owner_user_id").limit(1);
+  let query = supabaseAdmin.from("books").select("id, slug, owner_user_id, status").limit(1);
   query = isUuid(bookkey) ? query.eq("id", bookkey) : query.eq("slug", bookkey);
   const { data, error } = await query.maybeSingle<OwnedBook>();
   if (error) return { user, book: null, error: jsonError(`Error cargando libro: ${error.message}`, 500) };
@@ -233,6 +233,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
     const { error: bookUpdateError } = await supabaseAdmin
       .from("books")
       .update({
+        ...(access.book.status === "published" ? { status: "under_review" } : {}),
         preview_mode: "epub_preview",
         preview_status: "ready",
         preview_page_count: 25,
@@ -264,6 +265,13 @@ export async function PUT(request: Request, { params }: RouteContext) {
         optimized: normalization.optimized,
         report: normalization.report,
         warning: normalization.error || null,
+      },
+      publicationGate: {
+        ready: false,
+        status: "editorial_review",
+        reason: "epub_replaced",
+        requiresQualityGate: true,
+        bookStatus: access.book.status === "published" ? "under_review" : access.book.status,
       },
     });
   } catch (error) {
