@@ -22,9 +22,9 @@ export default async function EpubQualityPage() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
       <p className="text-xs font-black uppercase tracking-[0.22em] text-[#155eef]">LibroSeller Editorial Engine</p>
-      <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-950">EPUB Quality Gate</h1>
-      <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-        Audita estructura, OPF, spine, navegación, recursos, metadata y conflictos CSS antes de aprobar la publicación. 85/100 es la meta editorial recomendada; menos de 60 bloquea una publicación nueva.
+      <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-950">EPUB Quality Gate 10/10</h1>
+      <p className="mt-3 max-w-4xl text-sm leading-7 text-slate-600">
+        Audita OPF, spine, navegación, recursos y metadata, y en fixed-layout mide resolución raster, geometría, relación de aspecto, viewport, clipping y estiramiento. La aprobación editorial exige 90/100 o más y cero errores técnicos; cuando existe una variante optimizada, el gate valida exactamente la versión servida al lector.
       </p>
       <div className="mt-8">
         <EpubQualityClient books={(data ?? []).map((book) => ({ id: String(book.id), slug: String(book.slug), title: String(book.title), status: book.status ? String(book.status) : null }))} />
