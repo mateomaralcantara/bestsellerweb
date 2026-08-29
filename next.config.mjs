@@ -17,6 +17,10 @@ const nextConfig = {
           source: "/api/books",
           destination: "/api/books/create-9x",
         },
+        {
+          source: "/catalog",
+          destination: "/catalog-9x",
+        },
       ],
       afterFiles: [],
       fallback: [],
