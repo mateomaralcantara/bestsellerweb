@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import BookReaderClient from "@/app/reader/[slug]/BookReaderClient";
 import EpubReaderClient from "@/app/reader/[slug]/EpubReaderClient";
 import EpubHeadingCenter from "@/app/reader/[slug]/EpubHeadingCenter";
+import PreviewTelemetry from "./PreviewTelemetry";
 
 export const dynamic = "force-dynamic";
 
@@ -104,11 +105,9 @@ export default async function CatalogPreviewPage({
     notFound();
   }
 
-  // Para EPUB usamos siempre el archivo completo actual como fuente de verdad.
-  // /api/books/[bookkey]/epub?mode=preview crea en servidor una copia recortada
-  // a las primeras 25 secciones legibles. Al reemplazar el EPUB completo, esta
-  // vista cambia automaticamente sin depender de un epub_preview antiguo.
   if (await hasFullEpub(book.id)) {
+    const progressKey = `preview:${book.slug}:epub`;
+
     return (
       <div
         data-libroseller-epub-reader="true"
@@ -117,18 +116,18 @@ export default async function CatalogPreviewPage({
         <EpubReaderClient
           title={book.title}
           epubUrl={`/api/books/${encodeURIComponent(book.slug)}/epub?mode=preview`}
-          progressKey={`preview:${book.slug}:epub`}
+          progressKey={progressKey}
           exitUrl={`/catalog/${encodeURIComponent(book.slug)}`}
           exitLabel="Volver al libro"
           purchaseUrl={`/checkout/paypal?bookId=${encodeURIComponent(book.id)}`}
           mode="preview"
         />
         <EpubHeadingCenter />
+        <PreviewTelemetry bookSlug={book.slug} progressKey={progressKey} />
       </div>
     );
   }
 
-  // Compatibilidad con libros antiguos que solo tienen preview PDF por imagenes.
   const { data: pages, error: pagesError } = await supabaseAdmin
     .from("book_preview_pages")
     .select(
@@ -166,6 +165,7 @@ export default async function CatalogPreviewPage({
         typeof page.imageUrl === "string" && page.imageUrl.length > 0
     )
     .slice(0, PREVIEW_PAGE_LIMIT);
+  const progressKey = `preview:${book.slug}`;
 
   return (
     <div className="h-[100dvh] overflow-hidden bg-[#ececea]">
@@ -173,12 +173,13 @@ export default async function CatalogPreviewPage({
         title={book.title}
         coverUrl={book.cover_url}
         previewPages={readerPages}
-        progressKey={`preview:${book.slug}`}
+        progressKey={progressKey}
         exitUrl={`/catalog/${encodeURIComponent(book.slug)}`}
         exitLabel="Volver al libro"
         purchaseUrl={`/checkout/paypal?bookId=${encodeURIComponent(book.id)}`}
         mode="preview"
       />
+      <PreviewTelemetry bookSlug={book.slug} progressKey={progressKey} />
     </div>
   );
 }
