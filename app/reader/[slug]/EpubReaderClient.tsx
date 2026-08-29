@@ -109,8 +109,9 @@ type FixedFitSize = {
 const MIN_FONT = 85;
 const MAX_FONT = 150;
 const FONT_STEP = 10;
-const MIN_PAGE_ZOOM = 60;
-const MAX_PAGE_ZOOM = 180;
+const DEFAULT_PAGE_ZOOM = 250;
+const MIN_PAGE_ZOOM = 100;
+const MAX_PAGE_ZOOM = 350;
 const PAGE_ZOOM_STEP = 10;
 const SAVE_DELAY_MS = 600;
 const LOCATION_CHARS = 900;
@@ -343,19 +344,12 @@ function paperRules(
   fixedLayout: boolean
 ): Record<string, Record<string, string>> {
   if (fixedLayout) {
-    return {
-      body: {
-        color: "#172033 !important",
-        background: "#fffdf8 !important",
-      },
-    };
+    // Fixed-layout conserva íntegramente la composición declarada por el EPUB.
+    return {};
   }
 
   return {
     body: {
-      color: "#172033 !important",
-      background: "#fffdf8 !important",
-      "text-align": "center !important",
       "text-rendering": "optimizeLegibility !important",
       "-webkit-font-smoothing": "antialiased !important",
     },
@@ -365,14 +359,11 @@ function paperRules(
       "margin-right": "auto !important",
     },
     "p, li, blockquote": {
-      "text-align": "center !important",
+      "text-align": "justify !important",
+      "text-justify": "inter-word !important",
+      hyphens: "auto !important",
       orphans: "2 !important",
       widows: "2 !important",
-    },
-    "ul, ol": {
-      "list-style-position": "inside !important",
-      "padding-left": "0 !important",
-      "text-align": "center !important",
     },
     "figure, figcaption": {
       "text-align": "center !important",
@@ -383,24 +374,16 @@ function paperRules(
       "max-width": "100% !important",
       height: "auto !important",
       "object-fit": "contain !important",
-      display: "block !important",
-      "margin-left": "auto !important",
-      "margin-right": "auto !important",
     },
     table: {
       "max-width": "100% !important",
       "border-collapse": "collapse !important",
       "margin-left": "auto !important",
       "margin-right": "auto !important",
-      "text-align": "center !important",
-    },
-    "th, td": {
-      "text-align": "center !important",
     },
     "pre, code": {
       "white-space": "pre-wrap !important",
       "overflow-wrap": "anywhere !important",
-      "text-align": "center !important",
     },
   };
 }
@@ -451,7 +434,7 @@ export default function EpubReaderClient({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [fontSize, setFontSize] = useState(100);
-  const [pageZoom, setPageZoom] = useState(100);
+  const [pageZoom, setPageZoom] = useState(DEFAULT_PAGE_ZOOM);
   const [theme, setTheme] = useState<ReaderTheme>("paper");
   const [progress, setProgress] = useState(0);
   const [locationLabel, setLocationLabel] = useState("Inicio");
@@ -474,6 +457,7 @@ export default function EpubReaderClient({
   const readerScaleMin = fixedLayout ? MIN_PAGE_ZOOM : MIN_FONT;
   const readerScaleMax = fixedLayout ? MAX_PAGE_ZOOM : MAX_FONT;
   const readerScaleStep = fixedLayout ? PAGE_ZOOM_STEP : FONT_STEP;
+  const readerScaleDefault = fixedLayout ? DEFAULT_PAGE_ZOOM : 100;
 
   const fixedRenderedWidth = Math.max(
     1,
@@ -603,7 +587,7 @@ export default function EpubReaderClient({
 
   const resetReaderScale = useCallback(() => {
     if (fixedLayout) {
-      setPageZoom(100);
+      setPageZoom(DEFAULT_PAGE_ZOOM);
     } else {
       setFontSize(100);
     }
@@ -623,7 +607,7 @@ export default function EpubReaderClient({
       currentHrefRef.current = null;
       setFixedLayout(false);
       setFixedPageRatio(FIXED_LAYOUT_DEFAULT_RATIO);
-      setPageZoom(100);
+      setPageZoom(DEFAULT_PAGE_ZOOM);
 
       try {
         const savedPromise = loadSavedProgress();
@@ -1051,8 +1035,8 @@ export default function EpubReaderClient({
             type="button"
             onClick={resetReaderScale}
             className="min-w-12 rounded-lg px-1.5 py-1.5 text-center text-[11px] font-semibold text-emerald-300 hover:bg-white/10 sm:min-w-14"
-            title="Restablecer a 100%"
-            aria-label="Restablecer a 100%"
+            title={`Restablecer a ${readerScaleDefault}%`}
+            aria-label={`Restablecer a ${readerScaleDefault}%`}
           >
             {readerScale}%
           </button>
