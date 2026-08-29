@@ -243,7 +243,7 @@ function readAnnotations(progressKey: string): ReaderAnnotation[] {
 
     return parsed
       .filter((item) => item && typeof item === "object")
-      .map((item) => ({
+      .map((item): ReaderAnnotation => ({
         id: typeof item.id === "string" ? item.id : safeId(),
         kind: item.kind === "comment" ? "comment" : "highlight",
         sectionSignature:
