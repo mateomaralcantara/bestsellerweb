@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getAuthorPublishingAccess } from "@/lib/author-publishing-access";
 import { analyzeEpubBuffer } from "@/lib/epub-preflight";
+import { analyzeFixedLayoutQuality } from "@/lib/epub-fixed-layout-quality";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,10 @@ function safeKey(value: string) {
 
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 async function getBook(bookkey: string) {
@@ -104,15 +109,73 @@ export async function POST(_request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "El asset EPUB no tiene una ruta de almacenamiento válida." }, { status: 422 });
     }
 
-    const { data: blob, error: downloadError } = await supabaseAdmin.storage
+    const { data: originalBlob, error: downloadError } = await supabaseAdmin.storage
       .from(asset.storage_bucket)
       .download(asset.storage_path);
 
-    if (downloadError || !blob) {
+    if (downloadError || !originalBlob) {
       return NextResponse.json({ error: "No se pudo descargar el EPUB para auditarlo." }, { status: 502 });
     }
 
-    const report = await analyzeEpubBuffer(await blob.arrayBuffer());
+    let analysisBlob = originalBlob;
+    let analyzedVariant: "original" | "optimized" = "original";
+
+    const { data: normalization } = await supabaseAdmin
+      .from("epub_normalizations")
+      .select("source_asset_id, storage_bucket, storage_path, status, is_current")
+      .eq("book_id", access.book.id)
+      .eq("is_current", true)
+      .maybeSingle();
+
+    if (
+      normalization?.status === "normalized" &&
+      normalization.storage_bucket &&
+      normalization.storage_path &&
+      (!normalization.source_asset_id || normalization.source_asset_id === asset.id)
+    ) {
+      const { data: optimizedBlob } = await supabaseAdmin.storage
+        .from(normalization.storage_bucket)
+        .download(normalization.storage_path);
+      if (optimizedBlob) {
+        analysisBlob = optimizedBlob;
+        analyzedVariant = "optimized";
+      }
+    }
+
+    const analysisBytes = await analysisBlob.arrayBuffer();
+    const baseReport = await analyzeEpubBuffer(analysisBytes);
+    const fixedLayoutQuality = await analyzeFixedLayoutQuality(analysisBytes);
+
+    const findings = baseReport.findings.filter((item) => item.code !== "EPUB_READY");
+    findings.push(...fixedLayoutQuality.findings);
+
+    const score = clamp(baseReport.score - fixedLayoutQuality.penalty, 0, 100);
+    const hasErrors = findings.some((item) => item.severity === "error");
+    const status: "pass" | "warning" | "fail" =
+      hasErrors || score < 60 ? "fail" : score < 90 ? "warning" : "pass";
+
+    if (status === "pass") {
+      findings.push({
+        code: "EPUB_QUALITY_GATE_10",
+        severity: "info",
+        message: "EPUB aprobado por LibroSeller Quality Gate 10/10.",
+        detail: analyzedVariant === "optimized" ? "La auditoría evaluó la variante optimizada servida al lector." : "La auditoría evaluó el EPUB original.",
+      });
+    }
+
+    const report = {
+      ...baseReport,
+      score,
+      status,
+      findings,
+      summary: {
+        ...baseReport.summary,
+        preflightProfile: "libroseller-10",
+        analyzedVariant,
+        qualityThreshold: 90,
+        fixedLayoutQuality: fixedLayoutQuality.applicable ? fixedLayoutQuality.metrics : null,
+      },
+    };
 
     const { data: stored, error: storeError } = await supabaseAdmin
       .from("epub_preflight_reports")
@@ -163,7 +226,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
           version_number: Number(latest?.version_number || 0) + 1,
           checksum_sha256: report.checksumSha256,
           preflight_report_id: stored.id,
-          change_notes: "Versión detectada y auditada por LibroSeller EPUB Preflight.",
+          change_notes: `Versión auditada por LibroSeller Quality Gate 10/10 (${analyzedVariant}).`,
           is_current: true,
           created_by: access.user.id,
         })
@@ -172,11 +235,14 @@ export async function POST(_request: Request, { params }: RouteContext) {
       version = createdVersion ?? current;
     }
 
+    const publicationGate = report.score >= 90 && report.status === "pass" ? "ready" : "editorial_review";
+
     return NextResponse.json({
       book: { id: access.book.id, slug: access.book.slug, title: access.book.title },
       report: { ...report, id: stored.id },
       version,
-      publicationGate: report.score >= 85 && report.status === "pass" ? "ready" : "editorial_review",
+      publicationGate,
+      analyzedVariant,
     });
   } catch (error) {
     console.error("POST preflight:", error);
