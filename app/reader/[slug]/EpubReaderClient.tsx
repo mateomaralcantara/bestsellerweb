@@ -108,6 +108,7 @@ const SAVE_DELAY_MS = 600;
 const LOCATION_CHARS = 900;
 const VIEWPORT_WIDTH_RESERVE = 4;
 const VIEWPORT_HEIGHT_RESERVE = 10;
+const FIXED_LAYOUT_DEFAULT_RATIO = 2 / 3;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -183,6 +184,33 @@ function getViewportSize(viewer: HTMLElement) {
       Math.floor(rect.height) - VIEWPORT_HEIGHT_RESERVE
     ),
   };
+}
+
+function readFixedLayoutRatio(viewer: HTMLElement) {
+  try {
+    const iframe = viewer.querySelector<HTMLIFrameElement>("iframe");
+    const viewportMeta = iframe?.contentDocument
+      ?.querySelector('meta[name="viewport"]')
+      ?.getAttribute("content");
+
+    if (!viewportMeta) return null;
+
+    const width = Number(
+      viewportMeta.match(/(?:^|[,;]\s*)width\s*=\s*([0-9.]+)/i)?.[1]
+    );
+    const height = Number(
+      viewportMeta.match(/(?:^|[,;]\s*)height\s*=\s*([0-9.]+)/i)?.[1]
+    );
+
+    if (!Number.isFinite(width) || !Number.isFinite(height) || height <= 0) {
+      return null;
+    }
+
+    const ratio = width / height;
+    return ratio >= 0.25 && ratio <= 4 ? ratio : null;
+  } catch {
+    return null;
+  }
 }
 
 function readLocalProgress(progressKey: string): SavedProgress {
@@ -398,6 +426,10 @@ export default function EpubReaderClient({
   const [progress, setProgress] = useState(0);
   const [locationLabel, setLocationLabel] = useState("Inicio");
   const [moving, setMoving] = useState(false);
+  const [fixedLayout, setFixedLayout] = useState(false);
+  const [fixedPageRatio, setFixedPageRatio] = useState(
+    FIXED_LAYOUT_DEFAULT_RATIO
+  );
 
   const progressText = useMemo(
     () => `${Math.round(clamp(progress, 0, 100))}%`,
@@ -500,6 +532,8 @@ export default function EpubReaderClient({
       locationsReadyRef.current = false;
       currentCfiRef.current = null;
       currentHrefRef.current = null;
+      setFixedLayout(false);
+      setFixedPageRatio(FIXED_LAYOUT_DEFAULT_RATIO);
 
       try {
         const savedPromise = loadSavedProgress();
@@ -536,6 +570,14 @@ export default function EpubReaderClient({
         if (!viewer) return;
 
         fixedLayoutRef.current = isFixedLayout(book);
+        setFixedLayout(fixedLayoutRef.current);
+
+        if (fixedLayoutRef.current) {
+          await new Promise<void>((resolve) => {
+            window.requestAnimationFrame(() => resolve());
+          });
+        }
+        if (cancelled) return;
 
         const spineItems = Array.isArray(book.spine?.spineItems)
           ? book.spine?.spineItems ?? []
@@ -579,6 +621,34 @@ export default function EpubReaderClient({
         if (!fixedLayoutRef.current) {
           rendition.themes.fontSize("100%");
         }
+
+        rendition.on("rendered", () => {
+          if (!fixedLayoutRef.current) return;
+
+          window.requestAnimationFrame(() => {
+            const currentViewer = viewerRef.current;
+            if (!currentViewer) return;
+
+            const ratio = readFixedLayoutRatio(currentViewer);
+            if (!ratio) return;
+
+            setFixedPageRatio((previous) =>
+              Math.abs(previous - ratio) > 0.001 ? ratio : previous
+            );
+
+            window.requestAnimationFrame(() => {
+              const resizedViewer = viewerRef.current;
+              const currentRendition = renditionRef.current;
+              if (!resizedViewer || !currentRendition) return;
+
+              const nextViewport = getViewportSize(resizedViewer);
+              currentRendition.resize(
+                nextViewport.width,
+                nextViewport.height
+              );
+            });
+          });
+        });
 
         rendition.on("relocated", (location) => {
           const cfi = asText(location.start?.cfi) || null;
@@ -854,19 +924,32 @@ export default function EpubReaderClient({
         </button>
       </header>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-[radial-gradient(circle_at_50%_0%,rgba(56,189,248,0.10),transparent_36%),#071018] px-1.5 py-2 sm:px-3 sm:py-3 lg:px-5">
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_50%_0%,rgba(56,189,248,0.10),transparent_36%),#071018] px-1.5 py-2 sm:px-3 sm:py-3 lg:px-5">
         <div
-          className="relative mx-auto h-full min-h-0 w-full max-w-[1060px] overflow-hidden rounded-[18px] border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.38)]"
-          style={{ background: theme === "night" ? "#111827" : "#fffdf8" }}
+          className={
+            fixedLayout
+              ? "relative h-full max-h-full w-auto max-w-full flex-none overflow-hidden rounded-[18px] border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.38)]"
+              : "relative mx-auto h-full min-h-0 w-full max-w-[1060px] overflow-hidden rounded-[18px] border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.38)]"
+          }
+          style={{
+            background: theme === "night" ? "#111827" : "#fffdf8",
+            ...(fixedLayout
+              ? { aspectRatio: String(fixedPageRatio) }
+              : {}),
+          }}
         >
           <div
             className="absolute"
-            style={{
-              top: "clamp(16px, 2.5vh, 30px)",
-              right: "clamp(20px, 4vw, 54px)",
-              bottom: "clamp(28px, 4vh, 48px)",
-              left: "clamp(20px, 4vw, 54px)",
-            }}
+            style={
+              fixedLayout
+                ? { inset: "0" }
+                : {
+                    top: "clamp(16px, 2.5vh, 30px)",
+                    right: "clamp(20px, 4vw, 54px)",
+                    bottom: "clamp(28px, 4vh, 48px)",
+                    left: "clamp(20px, 4vw, 54px)",
+                  }
+            }
           >
             <div
               ref={viewerRef}
