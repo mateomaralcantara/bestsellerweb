@@ -156,7 +156,7 @@ export default function ProductEnhancements({
   preflight: Preflight;
   recommendations: Recommendation[];
 }) {
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
   const isPreview = pathname.endsWith("/preview");
 
   useEffect(() => {
