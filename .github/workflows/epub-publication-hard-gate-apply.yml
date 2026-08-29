@@ -48,6 +48,6 @@ jobs:
           fi
           git config user.name "LibroSeller Quality Bot"
           git config user.email "actions@users.noreply.github.com"
-          git add app/api/books/[bookkey]/route.ts app/api/books/[bookkey]/preflight/route.ts app/api/books/[bookkey]/epub-upload/route.ts
+          git add app/api/books/[bookkey]/route.ts app/api/books/[bookkey]/preflight/route.ts app/api/books/[bookkey]/epub-upload/route.ts app/api/admin/control/route.ts
           git commit -m "Apply EPUB publication hard gate"
           git push origin HEAD:feature/epub-publication-hard-gate
