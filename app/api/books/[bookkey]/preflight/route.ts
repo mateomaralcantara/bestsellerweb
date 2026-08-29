@@ -146,10 +146,15 @@ export async function POST(_request: Request, { params }: RouteContext) {
     const baseReport = await analyzeEpubBuffer(analysisBytes);
     const fixedLayoutQuality = await analyzeFixedLayoutQuality(analysisBytes);
 
-    const findings = baseReport.findings.filter((item) => item.code !== "EPUB_READY");
+    const semanticFixedCodes = new Set(["EPUB_TITLE_STRUCTURE", "EPUB_TITLE_ALIGNMENT"]);
+    const findings = baseReport.findings.filter(
+      (item) => item.code !== "EPUB_READY" && !(baseReport.layout === "fixed" && semanticFixedCodes.has(item.code))
+    );
     findings.push(...fixedLayoutQuality.findings);
 
-    const score = clamp(baseReport.score - fixedLayoutQuality.penalty, 0, 100);
+    const fixedSemanticRefund =
+      baseReport.layout === "fixed" && baseReport.findings.some((item) => item.code === "EPUB_TITLE_STRUCTURE") ? 5 : 0;
+    const score = clamp(baseReport.score + fixedSemanticRefund - fixedLayoutQuality.penalty, 0, 100);
     const hasErrors = findings.some((item) => item.severity === "error");
     const status: "pass" | "warning" | "fail" =
       hasErrors || score < 60 ? "fail" : score < 90 ? "warning" : "pass";
