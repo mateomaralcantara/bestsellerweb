@@ -7,6 +7,7 @@ import {
   writeAdminAudit,
 } from "@/lib/admin/superadmin";
 import { refundPayPalCapture } from "@/lib/paypal/admin-refund";
+import { getEpubPublicationGate } from "@/lib/epub-publication-gate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -597,6 +598,13 @@ async function updateBook(body: Body) {
 
   const before = await selectOne("books", "id", bookId);
   if (!before) throw new AdminAccessError("Libro no encontrado.", 404);
+
+  if (status === "published" && before.status !== "published") {
+    const publicationGate = await getEpubPublicationGate(bookId);
+    if (!publicationGate.ready) {
+      throw new AdminAccessError(publicationGate.message, 409);
+    }
+  }
 
   const roundedPrice = Math.round(paypalPrice * 100) / 100;
   const payload = {
