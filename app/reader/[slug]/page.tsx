@@ -7,6 +7,7 @@ import {
 } from "@/lib/book-access";
 import BookReaderClient from "./BookReaderClient";
 import EpubReaderClient from "./EpubReaderClient";
+import EpubAnnotationsLayer from "./EpubAnnotationsLayer";
 
 export const dynamic = "force-dynamic";
 
@@ -69,17 +70,20 @@ export default async function ReaderPage({ params }: PageProps) {
   const progressUrl = `/api/books/${encodeURIComponent(book.slug)}/progress`;
 
   if (readerAsset.readerFormat === "epub") {
+    const progressKey = `full:${book.slug}:epub`;
+
     return (
       <div className="h-[100dvh] overflow-hidden bg-[#071018]">
         <EpubReaderClient
           title={book.title}
           epubUrl={`/api/books/${encodeURIComponent(book.slug)}/epub?mode=full`}
           progressUrl={progressUrl}
-          progressKey={`full:${book.slug}:epub`}
+          progressKey={progressKey}
           exitUrl="/dashboard/books/purchased"
           exitLabel="Volver a mi biblioteca"
           mode="full"
         />
+        <EpubAnnotationsLayer progressKey={progressKey} />
       </div>
     );
   }
