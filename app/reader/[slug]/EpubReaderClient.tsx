@@ -101,14 +101,23 @@ type SavedProgress = {
   percent: number;
 };
 
+type FixedFitSize = {
+  width: number;
+  height: number;
+};
+
 const MIN_FONT = 85;
 const MAX_FONT = 150;
 const FONT_STEP = 10;
+const MIN_PAGE_ZOOM = 60;
+const MAX_PAGE_ZOOM = 180;
+const PAGE_ZOOM_STEP = 10;
 const SAVE_DELAY_MS = 600;
 const LOCATION_CHARS = 900;
 const VIEWPORT_WIDTH_RESERVE = 4;
 const VIEWPORT_HEIGHT_RESERVE = 10;
 const FIXED_LAYOUT_DEFAULT_RATIO = 2 / 3;
+const FIXED_STAGE_MARGIN = 18;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -175,14 +184,32 @@ function getViewportSize(viewer: HTMLElement) {
   const rect = viewer.getBoundingClientRect();
 
   return {
-    width: Math.max(
-      280,
-      Math.floor(rect.width) - VIEWPORT_WIDTH_RESERVE
-    ),
-    height: Math.max(
-      360,
-      Math.floor(rect.height) - VIEWPORT_HEIGHT_RESERVE
-    ),
+    width: Math.max(1, Math.floor(rect.width) - VIEWPORT_WIDTH_RESERVE),
+    height: Math.max(1, Math.floor(rect.height) - VIEWPORT_HEIGHT_RESERVE),
+  };
+}
+
+function fitFixedPage(
+  containerWidth: number,
+  containerHeight: number,
+  ratio: number
+): FixedFitSize {
+  const safeRatio =
+    Number.isFinite(ratio) && ratio > 0 ? ratio : FIXED_LAYOUT_DEFAULT_RATIO;
+  const maxWidth = Math.max(1, containerWidth - FIXED_STAGE_MARGIN * 2);
+  const maxHeight = Math.max(1, containerHeight - FIXED_STAGE_MARGIN * 2);
+
+  let height = maxHeight;
+  let width = height * safeRatio;
+
+  if (width > maxWidth) {
+    width = maxWidth;
+    height = width / safeRatio;
+  }
+
+  return {
+    width: Math.max(1, Math.floor(width)),
+    height: Math.max(1, Math.floor(height)),
   };
 }
 
@@ -406,6 +433,8 @@ export default function EpubReaderClient({
   purchaseUrl,
   mode,
 }: ReaderProps) {
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const renditionRef = useRef<EpubRendition | null>(null);
   const bookRef = useRef<EpubBook | null>(null);
@@ -422,6 +451,7 @@ export default function EpubReaderClient({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [fontSize, setFontSize] = useState(100);
+  const [pageZoom, setPageZoom] = useState(100);
   const [theme, setTheme] = useState<ReaderTheme>("paper");
   const [progress, setProgress] = useState(0);
   const [locationLabel, setLocationLabel] = useState("Inicio");
@@ -430,11 +460,31 @@ export default function EpubReaderClient({
   const [fixedPageRatio, setFixedPageRatio] = useState(
     FIXED_LAYOUT_DEFAULT_RATIO
   );
+  const [fixedFitSize, setFixedFitSize] = useState<FixedFitSize>({
+    width: 400,
+    height: 600,
+  });
 
   const progressText = useMemo(
     () => `${Math.round(clamp(progress, 0, 100))}%`,
     [progress]
   );
+
+  const readerScale = fixedLayout ? pageZoom : fontSize;
+  const readerScaleMin = fixedLayout ? MIN_PAGE_ZOOM : MIN_FONT;
+  const readerScaleMax = fixedLayout ? MAX_PAGE_ZOOM : MAX_FONT;
+  const readerScaleStep = fixedLayout ? PAGE_ZOOM_STEP : FONT_STEP;
+
+  const fixedRenderedWidth = Math.max(
+    1,
+    Math.round(fixedFitSize.width * (pageZoom / 100))
+  );
+  const fixedRenderedHeight = Math.max(
+    1,
+    Math.round(fixedFitSize.height * (pageZoom / 100))
+  );
+  const fixedCanvasWidth = fixedRenderedWidth + FIXED_STAGE_MARGIN * 2;
+  const fixedCanvasHeight = fixedRenderedHeight + FIXED_STAGE_MARGIN * 2;
 
   const applyProgress = useCallback((percent: number) => {
     const normalized = clamp(percent, 0, 100);
@@ -520,6 +570,45 @@ export default function EpubReaderClient({
     }
   }, [mode, progressKey, progressUrl]);
 
+  const changeReaderScale = useCallback(
+    (direction: -1 | 1) => {
+      if (fixedLayout) {
+        setPageZoom((value) =>
+          clamp(
+            value + direction * PAGE_ZOOM_STEP,
+            MIN_PAGE_ZOOM,
+            MAX_PAGE_ZOOM
+          )
+        );
+        return;
+      }
+
+      setFontSize((value) =>
+        clamp(value + direction * FONT_STEP, MIN_FONT, MAX_FONT)
+      );
+    },
+    [fixedLayout]
+  );
+
+  const setReaderScale = useCallback(
+    (value: number) => {
+      if (fixedLayout) {
+        setPageZoom(clamp(value, MIN_PAGE_ZOOM, MAX_PAGE_ZOOM));
+      } else {
+        setFontSize(clamp(value, MIN_FONT, MAX_FONT));
+      }
+    },
+    [fixedLayout]
+  );
+
+  const resetReaderScale = useCallback(() => {
+    if (fixedLayout) {
+      setPageZoom(100);
+    } else {
+      setFontSize(100);
+    }
+  }, [fixedLayout]);
+
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
@@ -534,6 +623,7 @@ export default function EpubReaderClient({
       currentHrefRef.current = null;
       setFixedLayout(false);
       setFixedPageRatio(FIXED_LAYOUT_DEFAULT_RATIO);
+      setPageZoom(100);
 
       try {
         const savedPromise = loadSavedProgress();
@@ -566,18 +656,36 @@ export default function EpubReaderClient({
         if (book.ready) await book.ready;
         if (cancelled) return;
 
-        const viewer = viewerRef.current;
-        if (!viewer) return;
+        const detectedFixedLayout = isFixedLayout(book);
+        fixedLayoutRef.current = detectedFixedLayout;
+        setFixedLayout(detectedFixedLayout);
 
-        fixedLayoutRef.current = isFixedLayout(book);
-        setFixedLayout(fixedLayoutRef.current);
+        if (detectedFixedLayout) {
+          const stage = stageRef.current;
+          if (stage) {
+            const rect = stage.getBoundingClientRect();
+            setFixedFitSize(
+              fitFixedPage(
+                rect.width,
+                rect.height,
+                FIXED_LAYOUT_DEFAULT_RATIO
+              )
+            );
+          }
 
-        if (fixedLayoutRef.current) {
           await new Promise<void>((resolve) => {
-            window.requestAnimationFrame(() => resolve());
+            window.requestAnimationFrame(() =>
+              window.requestAnimationFrame(() => resolve())
+            );
           });
         }
+
         if (cancelled) return;
+
+        const viewer = viewerRef.current;
+        if (!viewer) {
+          throw new Error("No se encontró el canvas del lector EPUB.");
+        }
 
         const spineItems = Array.isArray(book.spine?.spineItems)
           ? book.spine?.spineItems ?? []
@@ -635,18 +743,6 @@ export default function EpubReaderClient({
             setFixedPageRatio((previous) =>
               Math.abs(previous - ratio) > 0.001 ? ratio : previous
             );
-
-            window.requestAnimationFrame(() => {
-              const resizedViewer = viewerRef.current;
-              const currentRendition = renditionRef.current;
-              if (!resizedViewer || !currentRendition) return;
-
-              const nextViewport = getViewportSize(resizedViewer);
-              currentRendition.resize(
-                nextViewport.width,
-                nextViewport.height
-              );
-            });
           });
         });
 
@@ -783,6 +879,28 @@ export default function EpubReaderClient({
   ]);
 
   useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || !fixedLayout) return;
+
+    const updateFit = () => {
+      const rect = stage.getBoundingClientRect();
+      const next = fitFixedPage(rect.width, rect.height, fixedPageRatio);
+
+      setFixedFitSize((previous) =>
+        previous.width === next.width && previous.height === next.height
+          ? previous
+          : next
+      );
+    };
+
+    updateFit();
+    const observer = new ResizeObserver(updateFit);
+    observer.observe(stage);
+
+    return () => observer.disconnect();
+  }, [fixedLayout, fixedPageRatio]);
+
+  useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
 
@@ -812,6 +930,26 @@ export default function EpubReaderClient({
     observer.observe(viewer);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!fixedLayout) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const scroller = scrollRef.current;
+      if (!scroller) return;
+
+      scroller.scrollLeft = Math.max(
+        0,
+        (scroller.scrollWidth - scroller.clientWidth) / 2
+      );
+      scroller.scrollTop = Math.max(
+        0,
+        (scroller.scrollHeight - scroller.clientHeight) / 2
+      );
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [fixedLayout, fixedFitSize, pageZoom]);
 
   useEffect(() => {
     if (fixedLayoutRef.current) return;
@@ -852,7 +990,7 @@ export default function EpubReaderClient({
 
   return (
     <section className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[#071018] text-white">
-      <header className="z-30 flex h-16 shrink-0 items-center gap-3 border-b border-white/10 bg-[#09131d] px-3 shadow-lg sm:px-5">
+      <header className="z-30 flex h-16 shrink-0 items-center gap-2 border-b border-white/10 bg-[#09131d] px-2 shadow-lg sm:gap-3 sm:px-5">
         <a
           href={exitUrl}
           title={exitLabel}
@@ -868,7 +1006,7 @@ export default function EpubReaderClient({
             <span className="text-white/30">·</span>
             <span className="truncate text-white/40">{locationLabel}</span>
           </div>
-          <h1 className="mt-0.5 truncate text-center text-sm font-semibold text-white/95 sm:text-[15px]">
+          <h1 className="mt-0.5 truncate text-center text-xs font-semibold text-white/95 sm:text-[15px]">
             {title}
           </h1>
         </div>
@@ -876,39 +1014,58 @@ export default function EpubReaderClient({
         {mode === "preview" && purchaseUrl ? (
           <a
             href={purchaseUrl}
-            className="hidden rounded-xl bg-amber-400 px-3 py-2 text-xs font-black text-slate-950 sm:inline-flex"
+            className="hidden rounded-xl bg-amber-400 px-3 py-2 text-xs font-black text-slate-950 lg:inline-flex"
           >
             Comprar
           </a>
         ) : null}
 
-        <div className="hidden items-center gap-1 rounded-xl border border-white/10 bg-black/20 p-1 sm:flex">
-          <button
-            type="button"
-            onClick={() =>
-              setFontSize((value) =>
-                clamp(value - FONT_STEP, MIN_FONT, MAX_FONT)
-              )
-            }
-            className="h-8 rounded-lg px-2 text-sm font-semibold text-white/70 hover:bg-white/10"
-            aria-label="Reducir texto"
-          >
-            A−
-          </button>
-          <span className="min-w-12 text-center text-[11px] text-white/45">
-            {fontSize}%
+        <div className="flex shrink-0 items-center gap-1 rounded-xl border border-white/10 bg-black/20 p-1 shadow-inner">
+          <span className="hidden px-1 text-[9px] font-bold uppercase tracking-[0.12em] text-white/35 xl:inline">
+            {fixedLayout ? "Zoom" : "Texto"}
           </span>
+
           <button
             type="button"
-            onClick={() =>
-              setFontSize((value) =>
-                clamp(value + FONT_STEP, MIN_FONT, MAX_FONT)
-              )
-            }
-            className="h-8 rounded-lg px-2 text-sm font-semibold text-white/70 hover:bg-white/10"
-            aria-label="Aumentar texto"
+            onClick={() => changeReaderScale(-1)}
+            disabled={readerScale <= readerScaleMin}
+            className="h-8 min-w-8 rounded-lg px-2 text-sm font-bold text-white/75 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-25"
+            aria-label={fixedLayout ? "Reducir página" : "Reducir texto"}
+            title={fixedLayout ? "Reducir página" : "Reducir texto"}
           >
-            A+
+            {fixedLayout ? "−" : "A−"}
+          </button>
+
+          <input
+            type="range"
+            min={readerScaleMin}
+            max={readerScaleMax}
+            step={readerScaleStep}
+            value={readerScale}
+            onChange={(event) => setReaderScale(Number(event.target.value))}
+            className="hidden w-24 cursor-pointer accent-emerald-400 xl:block"
+            aria-label={fixedLayout ? "Zoom de página" : "Tamaño del texto"}
+          />
+
+          <button
+            type="button"
+            onClick={resetReaderScale}
+            className="min-w-12 rounded-lg px-1.5 py-1.5 text-center text-[11px] font-semibold text-emerald-300 hover:bg-white/10 sm:min-w-14"
+            title="Restablecer a 100%"
+            aria-label="Restablecer a 100%"
+          >
+            {readerScale}%
+          </button>
+
+          <button
+            type="button"
+            onClick={() => changeReaderScale(1)}
+            disabled={readerScale >= readerScaleMax}
+            className="h-8 min-w-8 rounded-lg px-2 text-sm font-bold text-white/75 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-25"
+            aria-label={fixedLayout ? "Agrandar página" : "Aumentar texto"}
+            title={fixedLayout ? "Agrandar página" : "Aumentar texto"}
+          >
+            {fixedLayout ? "+" : "A+"}
           </button>
         </div>
 
@@ -917,44 +1074,76 @@ export default function EpubReaderClient({
           onClick={() =>
             setTheme((value) => (value === "paper" ? "night" : "paper"))
           }
-          className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/[0.06] text-white/80 hover:bg-white/[0.12]"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/[0.06] text-white/80 hover:bg-white/[0.12]"
           aria-label="Cambiar tema"
         >
           {theme === "paper" ? "◐" : "☀"}
         </button>
       </header>
 
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_50%_0%,rgba(56,189,248,0.10),transparent_36%),#071018] px-1.5 py-2 sm:px-3 sm:py-3 lg:px-5">
+      <div
+        ref={stageRef}
+        className="relative min-h-0 flex-1 overflow-hidden bg-[radial-gradient(circle_at_50%_0%,rgba(56,189,248,0.10),transparent_36%),#071018]"
+      >
         <div
+          ref={scrollRef}
           className={
             fixedLayout
-              ? "relative h-full max-h-full w-auto max-w-full flex-none overflow-hidden rounded-[18px] border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.38)]"
-              : "relative mx-auto h-full min-h-0 w-full max-w-[1060px] overflow-hidden rounded-[18px] border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.38)]"
+              ? "absolute inset-0 overflow-auto overscroll-contain"
+              : "absolute inset-0 overflow-hidden"
           }
-          style={{
-            background: theme === "night" ? "#111827" : "#fffdf8",
-            ...(fixedLayout
-              ? { aspectRatio: String(fixedPageRatio) }
-              : {}),
-          }}
         >
           <div
-            className="absolute"
+            className={
+              fixedLayout
+                ? "grid place-items-center"
+                : "h-full w-full px-1.5 py-2 sm:px-3 sm:py-3 lg:px-5"
+            }
             style={
               fixedLayout
-                ? { inset: "0" }
-                : {
-                    top: "clamp(16px, 2.5vh, 30px)",
-                    right: "clamp(20px, 4vw, 54px)",
-                    bottom: "clamp(28px, 4vh, 48px)",
-                    left: "clamp(20px, 4vw, 54px)",
+                ? {
+                    width: `max(100%, ${fixedCanvasWidth}px)`,
+                    height: `max(100%, ${fixedCanvasHeight}px)`,
                   }
+                : undefined
             }
           >
             <div
-              ref={viewerRef}
-              className="h-full min-h-0 w-full overflow-hidden"
-            />
+              className={
+                fixedLayout
+                  ? "relative flex-none overflow-hidden rounded-[18px] border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.38)]"
+                  : "relative mx-auto h-full min-h-0 w-full max-w-[1060px] overflow-hidden rounded-[18px] border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.38)]"
+              }
+              style={{
+                background: theme === "night" ? "#111827" : "#fffdf8",
+                ...(fixedLayout
+                  ? {
+                      width: `${fixedRenderedWidth}px`,
+                      height: `${fixedRenderedHeight}px`,
+                      aspectRatio: String(fixedPageRatio),
+                    }
+                  : {}),
+              }}
+            >
+              <div
+                className="absolute"
+                style={
+                  fixedLayout
+                    ? { inset: "0" }
+                    : {
+                        top: "clamp(16px, 2.5vh, 30px)",
+                        right: "clamp(20px, 4vw, 54px)",
+                        bottom: "clamp(28px, 4vh, 48px)",
+                        left: "clamp(20px, 4vw, 54px)",
+                      }
+                }
+              >
+                <div
+                  ref={viewerRef}
+                  className="h-full min-h-0 w-full overflow-hidden"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -982,7 +1171,7 @@ export default function EpubReaderClient({
         ) : null}
 
         {loading ? (
-          <div className="absolute inset-0 z-20 grid place-items-center">
+          <div className="absolute inset-0 z-30 grid place-items-center">
             <div className="rounded-2xl border border-white/10 bg-[#08111a]/95 px-6 py-5 text-center shadow-2xl">
               <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-emerald-300" />
               <p className="mt-3 text-sm font-medium text-white/80">
@@ -993,7 +1182,7 @@ export default function EpubReaderClient({
         ) : null}
 
         {error ? (
-          <div className="absolute inset-0 z-20 grid place-items-center p-6">
+          <div className="absolute inset-0 z-30 grid place-items-center p-6">
             <div className="max-w-md rounded-3xl border border-rose-300/20 bg-[#161016]/95 p-7 text-center shadow-2xl">
               <p className="text-lg font-semibold">No pudimos abrir este EPUB</p>
               <p className="mt-2 text-sm leading-6 text-white/55">{error}</p>
