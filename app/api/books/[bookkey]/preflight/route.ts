@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getAuthorPublishingAccess } from "@/lib/author-publishing-access";
 import { analyzeEpubBuffer } from "@/lib/epub-preflight";
 import { analyzeFixedLayoutQuality } from "@/lib/epub-fixed-layout-quality";
+import { evaluateEpubPublicationGate } from "@/lib/epub-publication-gate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -177,6 +178,9 @@ export async function POST(_request: Request, { params }: RouteContext) {
         ...baseReport.summary,
         preflightProfile: "libroseller-10",
         analyzedVariant,
+        sourceAssetId: String(asset.id),
+        sourceStorageBucket: asset.storage_bucket,
+        sourceStoragePath: asset.storage_path,
         qualityThreshold: 90,
         fixedLayoutQuality: fixedLayoutQuality.applicable ? fixedLayoutQuality.metrics : null,
       },
@@ -240,13 +244,18 @@ export async function POST(_request: Request, { params }: RouteContext) {
       version = createdVersion ?? current;
     }
 
-    const publicationGate = report.score >= 90 && report.status === "pass" ? "ready" : "editorial_review";
+    const publicationGateDetail = evaluateEpubPublicationGate(
+      { id: asset.id, storage_path: asset.storage_path },
+      { id: stored.id, score: report.score, status: report.status, summary: report.summary }
+    );
+    const publicationGate = publicationGateDetail.ready ? "ready" : "editorial_review";
 
     return NextResponse.json({
       book: { id: access.book.id, slug: access.book.slug, title: access.book.title },
       report: { ...report, id: stored.id },
       version,
       publicationGate,
+      publicationGateDetail,
       analyzedVariant,
     });
   } catch (error) {

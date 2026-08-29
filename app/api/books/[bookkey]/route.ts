@@ -11,6 +11,7 @@ import {
   DEFAULT_BOOK_DISPLAY_SALES_COUNT,
   mergeBookSocialProofMetadata,
 } from "@/lib/book-social-proof";
+import { getEpubPublicationGate } from "@/lib/epub-publication-gate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,6 +53,7 @@ type OwnedBook = {
   slug: string;
   owner_user_id: string;
   cover_url: string | null;
+  status: string;
   metadata: Record<string, unknown> | null;
 };
 
@@ -419,7 +421,7 @@ async function getOwnedBook(bookKey: string) {
 
   let bookQuery = supabaseAdmin
     .from("books")
-    .select("id, title, slug, owner_user_id, cover_url, metadata");
+    .select("id, title, slug, owner_user_id, cover_url, status, metadata");
 
   bookQuery = isUuid(bookKey)
     ? bookQuery.eq("id", bookKey)
@@ -873,6 +875,36 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     const formData = await request.formData();
 
     const { title, status, keywords } = validateMainFields(formData);
+    const fullEpub = getFileField(formData, ["epub_file", "epub"]);
+
+    if (status === "published" && fullEpub) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Un EPUB nuevo no puede publicarse en la misma operación. Guárdalo en revisión, ejecuta LibroSeller Quality Gate 10/10 y luego publícalo.",
+          publicationGate: {
+            ready: false,
+            code: "new_epub_requires_preflight",
+          },
+        },
+        { status: 409 }
+      );
+    }
+
+    if (status === "published" && book.status !== "published") {
+      const publicationGate = await getEpubPublicationGate(book.id);
+      if (!publicationGate.ready) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: publicationGate.message,
+            publicationGate,
+          },
+          { status: 409 }
+        );
+      }
+    }
 
     const price = parseRequiredPrice(formData);
     const currency = readText(formData, "currency") || "DOP";
@@ -981,7 +1013,6 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     const changeNote = nullableText(formData, "change_note");
 
     const cover = getFileField(formData, ["cover"]);
-    const fullEpub = getFileField(formData, ["epub_file", "epub"]);
     const previewEpub = getFileField(formData, ["preview_epub"]);
 
     let changedCover = false;
