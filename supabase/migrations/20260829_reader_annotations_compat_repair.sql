@@ -32,18 +32,51 @@ alter table public.reader_annotations
   add column if not exists created_at timestamptz default now(),
   add column if not exists updated_at timestamptz default now();
 
+-- El esquema actual del lector define id como text. Algunas instalaciones antiguas
+-- lo crearon como uuid. La conversión uuid -> text es segura y preserva el valor,
+-- además permite el fallback textual del cliente (ann-...).
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'reader_annotations'
+      and column_name = 'id'
+      and data_type <> 'text'
+  ) then
+    alter table public.reader_annotations
+      alter column id type text using id::text;
+  end if;
+end
+$$;
+
+-- Normalizar kind a text si una instalación antigua utilizó otro tipo compatible.
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'reader_annotations'
+      and column_name = 'kind'
+      and data_type <> 'text'
+  ) then
+    alter table public.reader_annotations
+      alter column kind type text using kind::text;
+  end if;
+end
+$$;
+
 -- Defaults seguros para las escrituras nuevas. Las filas heredadas se conservan.
 alter table public.reader_annotations
   alter column note set default '',
   alter column created_at set default now(),
   alter column updated_at set default now();
 
--- IMPORTANTE: instalaciones antiguas pueden tener id como uuid. Se convierte a
--- texto únicamente para construir la firma legacy y evitar que PostgreSQL intente
--- convertir '' a uuid dentro de COALESCE.
 update public.reader_annotations
 set
-  kind = coalesce(nullif(kind::text, ''), 'highlight'),
+  kind = coalesce(nullif(kind, ''), 'highlight'),
   section_signature = coalesce(
     nullif(section_signature, ''),
     'legacy:' || md5(
@@ -61,8 +94,6 @@ set
   updated_at = coalesce(updated_at, now());
 
 -- El API usa upsert(..., { onConflict: "user_id,book_id,id" }).
--- Un índice UNIQUE sobre esas tres columnas permite inferir correctamente
--- ese conflicto sin eliminar filas heredadas con claves nulas.
 create unique index if not exists reader_annotations_user_book_id_uidx
   on public.reader_annotations(user_id, book_id, id);
 
