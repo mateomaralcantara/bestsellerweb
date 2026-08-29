@@ -8,6 +8,7 @@ import {
 import BookReaderClient from "./BookReaderClient";
 import EpubReaderClient from "./EpubReaderClient";
 import EpubAnnotationsLayer from "./EpubAnnotationsLayer";
+import EpubHeadingCenter from "./EpubHeadingCenter";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +76,10 @@ export default async function ReaderPage({ params }: PageProps) {
     const progressKey = `full:${book.slug}:epub`;
 
     return (
-      <div className="h-[100dvh] overflow-hidden bg-[#071018]">
+      <div
+        data-libroseller-epub-reader="true"
+        className="h-[100dvh] overflow-hidden bg-[#071018]"
+      >
         <EpubReaderClient
           title={book.title}
           epubUrl={`/api/books/${encodedSlug}/epub?mode=full`}
@@ -89,6 +93,7 @@ export default async function ReaderPage({ params }: PageProps) {
           progressKey={progressKey}
           annotationsUrl={annotationsUrl}
         />
+        <EpubHeadingCenter />
       </div>
     );
   }
