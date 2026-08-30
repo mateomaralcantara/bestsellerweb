@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import BookReaderClient from "@/app/reader/[slug]/BookReaderClient";
 import EpubReaderClient from "@/app/reader/[slug]/EpubReaderClient";
+import EpubFixedLayoutGuard from "@/app/reader/[slug]/EpubFixedLayoutGuard";
 import EpubHeadingCenter from "@/app/reader/[slug]/EpubHeadingCenter";
 import PreviewTelemetry from "./PreviewTelemetry";
 import PreviewSubscriberGate from "./PreviewSubscriberGate";
@@ -123,6 +124,7 @@ export default async function CatalogPreviewPage({
           purchaseUrl={`/checkout/paypal?bookId=${encodeURIComponent(book.id)}`}
           mode="preview"
         />
+        <EpubFixedLayoutGuard />
         <EpubHeadingCenter />
         <PreviewTelemetry bookSlug={book.slug} progressKey={progressKey} />
         <PreviewSubscriberGate
