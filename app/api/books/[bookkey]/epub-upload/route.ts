@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { normalizeBookEpubById } from "@/lib/epub-normalization-service";
@@ -249,7 +249,21 @@ export async function PUT(request: Request, { params }: RouteContext) {
       ...(oldPreviews ?? []).map((item) => item.storage_path),
     ]);
 
-    const normalization = await normalizeBookEpubById(access.book.id);
+    // La normalización puede descargar y procesar decenas de MB. Se ejecuta después
+    // de responder para que guardar el libro nunca quede bloqueado por ese trabajo pesado.
+    after(async () => {
+      try {
+        const normalization = await normalizeBookEpubById(access.book.id);
+        if (normalization.status === "error") {
+          console.warn(
+            "Normalización EPUB posterior al guardado:",
+            normalization.error || "error sin detalle"
+          );
+        }
+      } catch (normalizationError) {
+        console.warn("Normalización EPUB posterior al guardado:", normalizationError);
+      }
+    });
 
     return NextResponse.json({
       ok: true,
@@ -261,10 +275,10 @@ export async function PUT(request: Request, { params }: RouteContext) {
       },
       preview: { mode: "derived_from_current_epub", pageCount: 25, refreshed: true },
       normalization: {
-        status: normalization.status,
-        optimized: normalization.optimized,
-        report: normalization.report,
-        warning: normalization.error || null,
+        status: "queued",
+        optimized: false,
+        report: null,
+        warning: null,
       },
       publicationGate: {
         ready: false,
