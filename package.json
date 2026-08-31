@@ -4,8 +4,8 @@
     "private":  true,
     "scripts":  {
                     "clean":  "powershell -Command \"if (Test-Path .next) { Remove-Item -Recurse -Force .next }\"",
-                    "dev":  "next dev",
-                    "dev:clean":  "npm run clean \u0026\u0026 next dev",
+                    "dev":  "next dev --webpack -p 3000",
+                    "dev:clean":  "npm run clean && next dev --webpack -p 3000",
                     "build":  "next build --webpack",
                     "start":  "next start",
                     "verify:book-preview":  "node scripts/verify-book-preview.cjs",
