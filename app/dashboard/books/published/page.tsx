@@ -72,10 +72,10 @@ function PublishedBookCard({ book }: { book: PublishedBook }) {
             src={book.cover_url}
             alt={book.title}
             className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
-
-              width={600}
-              height={900}
-              sizes="(max-width: 768px) 50vw, 240px"/>
+            width={600}
+            height={900}
+            sizes="(max-width: 768px) 50vw, 240px"
+          />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-slate-500">
             Sin portada
@@ -105,13 +105,31 @@ function PublishedBookCard({ book }: { book: PublishedBook }) {
             {getAuthorName(book)}
           </p>
 
-          {book.primary_category ? (
-            <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
-              {book.primary_category}
+          {book.primary_niche || book.primary_category || book.secondary_category ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {book.primary_niche ? (
+                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-[#155eef]">
+                  {book.primary_niche}
+                </span>
+              ) : null}
+              {book.primary_category ? (
+                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-slate-600">
+                  {book.primary_category}
+                </span>
+              ) : null}
+              {book.secondary_category ? (
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  {book.secondary_category}
+                </span>
+              ) : null}
+            </div>
+          ) : (
+            <p className="mt-3 text-xs font-bold text-amber-700">
+              Sin clasificación editorial
             </p>
-          ) : null}
+          )}
 
-          <p className="mt-2 line-clamp-2 text-sm text-slate-500">
+          <p className="mt-3 line-clamp-2 text-sm text-slate-500">
             {book.description_short ||
               "Publicado y listo para gestión desde tu panel."}
           </p>
@@ -212,8 +230,8 @@ export default async function PublishedBooksPage() {
 
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
             Desde aquí puedes ver, previsualizar y editar los datos de
-            publicación de cada libro: título, categoría, precio, SEO, portada,
-            EPUB completo y EPUB preview.
+            publicación de cada libro: título, nicho, categoría, precio, SEO,
+            portada y EPUB.
           </p>
         </div>
 
