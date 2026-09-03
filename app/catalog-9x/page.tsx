@@ -172,7 +172,6 @@ export default async function Catalog9x({ searchParams }: Props) {
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {books.map((book, index) => {
             const rating = n(book.verified_rating);
-            const sales = n(book.verified_sales_count);
             const bestseller = n(book.bestseller_score);
             return (
               <Link key={book.book_id} href={`/catalog/${book.slug}`} className="group overflow-hidden rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
@@ -187,7 +186,6 @@ export default async function Catalog9x({ searchParams }: Props) {
                   <span className="font-black text-slate-950">{priceLabel(editionMap.get(book.book_id))}</span>
                   {rating > 0 ? <span className="inline-flex items-center gap-1 font-bold text-amber-700"><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" /> {rating.toFixed(1)}</span> : <span className="font-bold text-slate-400">Nuevo</span>}
                 </div>
-                {sales > 0 ? <p className="mt-1 text-[11px] font-bold text-emerald-700">{Math.round(sales)} compras verificadas</p> : null}
               </Link>
             );
           })}
