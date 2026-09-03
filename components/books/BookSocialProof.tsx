@@ -1,9 +1,7 @@
 import { Star } from "lucide-react";
 import {
   DEFAULT_BOOK_DISPLAY_RATING,
-  DEFAULT_BOOK_DISPLAY_SALES_COUNT,
   normalizeDisplayRating,
-  normalizeDisplaySalesCount,
 } from "@/lib/book-social-proof";
 
 type BookSocialProofProps = {
@@ -33,15 +31,10 @@ function RatingStar({ fill }: { fill: number }) {
 
 export function BookSocialProof({
   rating = DEFAULT_BOOK_DISPLAY_RATING,
-  salesCount = DEFAULT_BOOK_DISPLAY_SALES_COUNT,
   compact = false,
   className = "",
 }: BookSocialProofProps) {
   const safeRating = normalizeDisplayRating(rating);
-  const safeSalesCount = normalizeDisplaySalesCount(salesCount);
-  const formattedSalesCount = new Intl.NumberFormat("es-DO").format(
-    safeSalesCount
-  );
 
   if (safeRating <= 0) {
     return (
@@ -49,24 +42,12 @@ export function BookSocialProof({
         className={`flex flex-wrap items-center gap-x-2 gap-y-1 ${
           compact ? "text-xs" : "text-sm"
         } ${className}`}
-        aria-label={
-          safeSalesCount > 0
-            ? `${formattedSalesCount} compras verificadas; sin reseñas todavía`
-            : "Libro nuevo; sin reseñas todavía"
-        }
+        aria-label="Libro nuevo; sin reseñas todavía"
       >
         <span className="rounded-full bg-blue-50 px-2 py-1 font-black text-blue-700">
           Nuevo
         </span>
         <span className="font-bold text-slate-600">Sin reseñas todavía</span>
-        {safeSalesCount > 0 ? (
-          <>
-            <span className="text-slate-300" aria-hidden="true">·</span>
-            <span className="font-bold text-slate-600">
-              {formattedSalesCount} compras verificadas
-            </span>
-          </>
-        ) : null}
       </div>
     );
   }
@@ -76,7 +57,7 @@ export function BookSocialProof({
       className={`flex flex-wrap items-center gap-x-2 gap-y-1 ${
         compact ? "text-xs" : "text-sm"
       } ${className}`}
-      aria-label={`${safeRating.toFixed(1)} de 5 estrellas; ${formattedSalesCount} compras verificadas`}
+      aria-label={`${safeRating.toFixed(1)} de 5 estrellas`}
     >
       <span className="flex items-center gap-0.5">
         {STAR_INDEXES.map((index) => (
@@ -86,10 +67,6 @@ export function BookSocialProof({
       <strong className="font-black text-amber-700">
         {safeRating.toFixed(1)}/5
       </strong>
-      <span className="text-slate-300" aria-hidden="true">·</span>
-      <span className="font-bold text-slate-600">
-        {formattedSalesCount} compras verificadas
-      </span>
     </div>
   );
 }
