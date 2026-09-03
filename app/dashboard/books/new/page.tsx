@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthorPublishingAccess } from "@/lib/author-publishing-access";
-import NewBookForm from "./NewBookForm";
+import NewBookDirectUpload from "./NewBookDirectUpload";
 
 export const dynamic = "force-dynamic";
 
@@ -23,5 +23,5 @@ export default async function NewBookPage() {
     redirect("/publish");
   }
 
-  return <NewBookForm />;
+  return <NewBookDirectUpload />;
 }
