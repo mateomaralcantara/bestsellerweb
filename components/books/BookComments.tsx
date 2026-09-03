@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import {
-  BadgeCheck,
   Loader2,
   MessageCircle,
   Sparkles,
@@ -406,12 +405,6 @@ export function BookComments({ bookSlug, bookTitle }: BookCommentsProps) {
                       <strong className="text-slate-950">
                         {item.authorName}
                       </strong>
-                      {item.isVerifiedPurchase ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700">
-                          <BadgeCheck className="h-3.5 w-3.5" />
-                          Compra verificada
-                        </span>
-                      ) : null}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <ReadOnlyStars value={item.rating} />
