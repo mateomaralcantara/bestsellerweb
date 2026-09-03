@@ -40,6 +40,9 @@ export function BookCard({ book }: BookCardProps) {
     typeof book.compare_at_price === "number" ? book.compare_at_price : null;
   const priceCurrency = book.currency || "USD";
   const href = `/catalog/${book.slug}`;
+  const primaryNiche = normalizeText(book.primary_niche);
+  const primaryCategory = normalizeText(book.primary_category);
+  const secondaryCategory = normalizeText(book.secondary_category);
 
   return (
     <article className="group commercial-card flex h-full flex-col overflow-hidden rounded-[30px] transition duration-300 hover:-translate-y-1.5 hover:border-blue-200 hover:shadow-[0_32px_80px_rgba(21,94,239,0.14)]">
@@ -53,10 +56,10 @@ export function BookCard({ book }: BookCardProps) {
               alt={`Portada de ${book.title}`}
               className="book-cover-shadow aspect-[2/3] w-full rounded-r-lg rounded-l-sm object-cover"
               draggable={false}
-
               width={600}
               height={900}
-              sizes="(max-width: 768px) 50vw, 240px"/>
+              sizes="(max-width: 768px) 50vw, 240px"
+            />
           ) : (
             <div className="book-cover-shadow flex aspect-[2/3] w-full flex-col justify-between rounded-r-lg rounded-l-sm bg-gradient-to-br from-[#155eef] to-[#07111f] p-5 text-white">
               <BookOpen className="h-7 w-7 text-cyan-200" />
@@ -87,6 +90,35 @@ export function BookCard({ book }: BookCardProps) {
             Compra segura
           </span>
         </div>
+
+        {primaryNiche || primaryCategory || secondaryCategory ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {primaryNiche ? (
+              <Link
+                href={`/catalog?category=${encodeURIComponent(primaryNiche)}`}
+                className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-[#155eef] transition hover:bg-blue-100"
+              >
+                {primaryNiche}
+              </Link>
+            ) : null}
+            {primaryCategory ? (
+              <Link
+                href={`/catalog?category=${encodeURIComponent(primaryCategory)}`}
+                className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-slate-600 transition hover:border-blue-200 hover:text-[#155eef]"
+              >
+                {primaryCategory}
+              </Link>
+            ) : null}
+            {secondaryCategory ? (
+              <Link
+                href={`/catalog?category=${encodeURIComponent(secondaryCategory)}`}
+                className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500 transition hover:border-blue-200 hover:text-[#155eef]"
+              >
+                {secondaryCategory}
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
 
         <BookSocialProof
           rating={book.rating}
