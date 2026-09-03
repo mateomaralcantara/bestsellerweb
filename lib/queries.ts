@@ -17,6 +17,10 @@ const BOOK_SELECT = `
   cover_url,
   status,
   featured,
+  primary_niche,
+  primary_category,
+  secondary_category,
+  keywords,
   language_code,
   isbn_13,
   page_count,
@@ -64,6 +68,10 @@ type BookRow = {
   cover_url?: string | null;
   status?: string | null;
   featured?: boolean | null;
+  primary_niche?: string | null;
+  primary_category?: string | null;
+  secondary_category?: string | null;
+  keywords?: string[] | null;
   language_code?: string | null;
   isbn_13?: string | null;
   page_count?: number | null;
@@ -97,6 +105,10 @@ function normalizeText(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : null;
+}
+
+function uniqueText(values: Array<string | null | undefined>) {
+  return [...new Set(values.map(normalizeText).filter((value): value is string => Boolean(value)))];
 }
 
 function normalizeStatus(value: unknown): BookStatus | null {
@@ -193,6 +205,13 @@ function normalizeBook(
   const verifiedRating = normalizeNumber(verifiedMetrics?.verified_rating);
   const verifiedSales = normalizeNumber(verifiedMetrics?.verified_sales_count);
   const verifiedReviews = normalizeNumber(verifiedMetrics?.review_count);
+  const primaryNiche = normalizeText(row.primary_niche);
+  const primaryCategory = normalizeText(row.primary_category);
+  const secondaryCategory = normalizeText(row.secondary_category);
+  const categories = uniqueText([primaryCategory, secondaryCategory]);
+  const keywords = Array.isArray(row.keywords)
+    ? uniqueText(row.keywords).slice(0, 12)
+    : null;
 
   const shortDescription =
     normalizeText(row.description_short) ||
@@ -221,6 +240,11 @@ function normalizeBook(
     page_count: typeof row.page_count === "number" ? row.page_count : null,
     publication_date: row.publication_date ?? null,
 
+    primary_niche: primaryNiche,
+    primary_category: primaryCategory,
+    secondary_category: secondaryCategory,
+    keywords,
+
     price: pricing.price,
     compare_at_price: pricing.compareAtPrice,
     currency: pricing.currency,
@@ -228,7 +252,7 @@ function normalizeBook(
     review_count: verifiedReviews ?? 0,
     sales_count: verifiedSales ?? metadataProof.salesCount,
     formats: format ? [format] : [],
-    categories: [],
+    categories,
     badge: null,
     kindle_url: null,
 
@@ -303,7 +327,6 @@ async function getVerifiedMetricsMap(
     .in("book_id", bookIds);
 
   if (error) {
-    // Compatibilidad durante el despliegue previo a aplicar la migración 9.x.
     console.warn("GETBOOKS VERIFIED METRICS:", error.message);
     return metricsByBook;
   }
@@ -393,5 +416,8 @@ export const getBookBySlug = cache(async (slug: string): Promise<Book | null> =>
 });
 
 export const getBookCategories = cache(async (): Promise<string[]> => {
-  return [];
+  const books = await getBooks();
+  return [...new Set(books.flatMap((book) => book.categories ?? []))].sort((a, b) =>
+    a.localeCompare(b, "es")
+  );
 });
