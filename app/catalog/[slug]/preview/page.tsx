@@ -73,7 +73,10 @@ async function hasFullEpub(bookId: string) {
     .maybeSingle();
 
   if (error) {
-    console.error("[PREVIEW] Error buscando EPUB completo:", error.message);
+    console.error(
+      "[PREVIEW] Error buscando EPUB completo:",
+      error.message
+    );
     return false;
   }
 
@@ -99,7 +102,10 @@ export default async function CatalogPreviewPage({
     .maybeSingle<BookRow>();
 
   if (bookError) {
-    console.error("[PREVIEW] Error cargando libro:", bookError.message);
+    console.error(
+      "[PREVIEW] Error cargando libro:",
+      bookError.message
+    );
     notFound();
   }
 
@@ -107,35 +113,13 @@ export default async function CatalogPreviewPage({
     notFound();
   }
 
-  if (await hasFullEpub(book.id)) {
-    const progressKey = `preview:${book.slug}:epub`;
-
-    return (
-      <div
-        data-libroseller-epub-reader="true"
-        className="h-[100dvh] overflow-hidden bg-[#071018]"
-      >
-        <EpubReaderClient
-          title={book.title}
-          epubUrl={`/api/books/${encodeURIComponent(book.slug)}/epub?mode=preview`}
-          progressKey={progressKey}
-          exitUrl={`/catalog/${encodeURIComponent(book.slug)}`}
-          exitLabel="Volver al libro"
-          purchaseUrl={`/checkout/paypal?bookId=${encodeURIComponent(book.id)}`}
-          mode="preview"
-        />
-        <EpubFixedLayoutGuard />
-        <EpubHeadingCenter />
-        <PreviewTelemetry bookSlug={book.slug} progressKey={progressKey} />
-        <PreviewSubscriberGate
-          bookSlug={book.slug}
-          bookTitle={book.title}
-          progressKey={progressKey}
-          readerKind="epub"
-        />
-      </div>
-    );
-  }
+  /*
+   * PRIORIDAD DEL PREVIEW
+   *
+   * 1. Buscar hasta 25 páginas visuales.
+   * 2. Si existen, mostrarlas con BookReaderClient.
+   * 3. Solo si NO existen páginas válidas, usar EPUB como fallback.
+   */
 
   const { data: pages, error: pagesError } = await supabaseAdmin
     .from("book_preview_pages")
@@ -148,7 +132,10 @@ export default async function CatalogPreviewPage({
     .returns<PreviewPageRow[]>();
 
   if (pagesError) {
-    console.error("[PREVIEW] Error cargando paginas:", pagesError.message);
+    console.error(
+      "[PREVIEW] Error cargando paginas:",
+      pagesError.message
+    );
   }
 
   const previewPages: PreviewPageRow[] =
@@ -161,7 +148,8 @@ export default async function CatalogPreviewPage({
       return {
         imageUrl,
         sourcePageNumber:
-          page.source_page_number ?? ((page.page_index ?? index) + 1),
+          page.source_page_number ??
+          ((page.page_index ?? index) + 1),
         width: page.width,
         height: page.height,
       };
@@ -171,24 +159,129 @@ export default async function CatalogPreviewPage({
   const readerPages = resolvedPages
     .filter(
       (page) =>
-        typeof page.imageUrl === "string" && page.imageUrl.length > 0
+        typeof page.imageUrl === "string" &&
+        page.imageUrl.length > 0
     )
     .slice(0, PREVIEW_PAGE_LIMIT);
+
+  /*
+   * PREVIEW VISUAL PRIMARIO
+   */
+
+  if (readerPages.length > 0) {
+    const progressKey = `preview:${book.slug}`;
+
+    return (
+      <div
+        data-libroseller-page-preview="true"
+        data-preview-page-count={readerPages.length}
+        data-preview-page-limit={PREVIEW_PAGE_LIMIT}
+        className="h-[100dvh] overflow-hidden bg-[#ececea]"
+      >
+        <BookReaderClient
+          title={book.title}
+          coverUrl={book.cover_url}
+          previewPages={readerPages}
+          progressKey={progressKey}
+          exitUrl={`/catalog/${encodeURIComponent(book.slug)}`}
+          exitLabel="Volver al libro"
+          purchaseUrl={`/checkout/paypal?bookId=${encodeURIComponent(
+            book.id
+          )}`}
+          mode="preview"
+        />
+
+        <PreviewTelemetry
+          bookSlug={book.slug}
+          progressKey={progressKey}
+        />
+
+        <PreviewSubscriberGate
+          bookSlug={book.slug}
+          bookTitle={book.title}
+          progressKey={progressKey}
+          readerKind="pages"
+        />
+      </div>
+    );
+  }
+
+  /*
+   * EPUB SOLO COMO FALLBACK
+   */
+
+  if (await hasFullEpub(book.id)) {
+    const progressKey = `preview:${book.slug}:epub`;
+
+    return (
+      <div
+        data-libroseller-epub-reader="true"
+        data-libroseller-preview-fallback="epub"
+        className="h-[100dvh] overflow-hidden bg-[#071018]"
+      >
+        <EpubReaderClient
+          title={book.title}
+          epubUrl={`/api/books/${encodeURIComponent(
+            book.slug
+          )}/epub?mode=preview`}
+          progressKey={progressKey}
+          exitUrl={`/catalog/${encodeURIComponent(book.slug)}`}
+          exitLabel="Volver al libro"
+          purchaseUrl={`/checkout/paypal?bookId=${encodeURIComponent(
+            book.id
+          )}`}
+          mode="preview"
+        />
+
+        <EpubFixedLayoutGuard />
+        <EpubHeadingCenter />
+
+        <PreviewTelemetry
+          bookSlug={book.slug}
+          progressKey={progressKey}
+        />
+
+        <PreviewSubscriberGate
+          bookSlug={book.slug}
+          bookTitle={book.title}
+          progressKey={progressKey}
+          readerKind="epub"
+        />
+      </div>
+    );
+  }
+
+  /*
+   * SIN PÁGINAS Y SIN EPUB
+   */
+
   const progressKey = `preview:${book.slug}`;
 
   return (
-    <div className="h-[100dvh] overflow-hidden bg-[#ececea]">
+    <div
+      data-libroseller-page-preview="true"
+      data-preview-page-count={0}
+      data-preview-page-limit={PREVIEW_PAGE_LIMIT}
+      className="h-[100dvh] overflow-hidden bg-[#ececea]"
+    >
       <BookReaderClient
         title={book.title}
         coverUrl={book.cover_url}
-        previewPages={readerPages}
+        previewPages={[]}
         progressKey={progressKey}
         exitUrl={`/catalog/${encodeURIComponent(book.slug)}`}
         exitLabel="Volver al libro"
-        purchaseUrl={`/checkout/paypal?bookId=${encodeURIComponent(book.id)}`}
+        purchaseUrl={`/checkout/paypal?bookId=${encodeURIComponent(
+          book.id
+        )}`}
         mode="preview"
       />
-      <PreviewTelemetry bookSlug={book.slug} progressKey={progressKey} />
+
+      <PreviewTelemetry
+        bookSlug={book.slug}
+        progressKey={progressKey}
+      />
+
       <PreviewSubscriberGate
         bookSlug={book.slug}
         bookTitle={book.title}
