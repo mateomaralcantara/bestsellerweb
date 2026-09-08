@@ -3,6 +3,10 @@ import { after, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { normalizeBookEpubById } from "@/lib/epub-normalization-service";
+import {
+  clearBookVisualPreviewById,
+  materializeEpubVisualPreviewByBookId,
+} from "@/lib/epub-visual-preview-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -230,38 +234,97 @@ export async function PUT(request: Request, { params }: RouteContext) {
       .eq("asset_type", "epub_preview");
     if (deletePreviewError) console.warn("No se pudo limpiar epub_preview anterior:", deletePreviewError.message);
 
+    // Invalida inmediatamente cualquier muestra visual anterior.
+    // Así nunca mostramos páginas del EPUB viejo mientras el nuevo
+    // está siendo clasificado y procesado.
+    await clearBookVisualPreviewById(access.book.id);
+
     const { error: bookUpdateError } = await supabaseAdmin
       .from("books")
       .update({
         ...(access.book.status === "published" ? { status: "under_review" } : {}),
         preview_mode: "epub_preview",
-        preview_status: "ready",
-        preview_page_count: 25,
+        preview_status: "pending",
+        preview_page_count: null,
         preview_error: null,
-        preview_generated_at: now,
+        preview_generated_at: null,
         updated_at: now,
       })
       .eq("id", access.book.id);
-    if (bookUpdateError) console.warn("No se pudo actualizar metadata preview:", bookUpdateError.message);
+
+    if (bookUpdateError) {
+      throw new Error(
+        `No se pudo actualizar metadata preview: ${bookUpdateError.message}`
+      );
+    }
 
     await removeStorageObjects([
       ...(previousEpubs ?? []).map((item) => item.storage_path).filter((item) => item && item !== storagePath),
       ...(oldPreviews ?? []).map((item) => item.storage_path),
     ]);
 
-    // La normalización puede descargar y procesar decenas de MB. Se ejecuta después
-    // de responder para que guardar el libro nunca quede bloqueado por ese trabajo pesado.
+    // Primero clasifica/materializa la muestra. Si el EPUB contiene
+    // 25 páginas-imagen seguras, crea book_preview_pages automáticamente.
+    // Si es reflowable o complejo, queda correctamente en fallback EPUB.
+    //
+    // Después se mantiene la normalización existente del EPUB completo.
     after(async () => {
       try {
-        const normalization = await normalizeBookEpubById(access.book.id);
+        const preview =
+          await materializeEpubVisualPreviewByBookId(
+            access.book.id
+          );
+
+        console.info(
+          "Preview EPUB posterior al guardado:",
+          preview.mode,
+          preview.pageCount,
+          preview.reason
+        );
+      } catch (previewError) {
+        console.warn(
+          "Preview EPUB posterior al guardado:",
+          previewError
+        );
+
+        const message =
+          previewError instanceof Error
+            ? previewError.message
+            : "Error procesando preview EPUB.";
+
+        await supabaseAdmin
+          .from("books")
+          .update({
+            preview_mode: "epub_preview",
+            preview_status: "ready",
+            preview_page_count: null,
+            preview_error: message.slice(0, 1000),
+            preview_generated_at:
+              new Date().toISOString(),
+            updated_at:
+              new Date().toISOString(),
+          })
+          .eq("id", access.book.id);
+      }
+
+      try {
+        const normalization =
+          await normalizeBookEpubById(
+            access.book.id
+          );
+
         if (normalization.status === "error") {
           console.warn(
             "Normalización EPUB posterior al guardado:",
-            normalization.error || "error sin detalle"
+            normalization.error ||
+              "error sin detalle"
           );
         }
       } catch (normalizationError) {
-        console.warn("Normalización EPUB posterior al guardado:", normalizationError);
+        console.warn(
+          "Normalización EPUB posterior al guardado:",
+          normalizationError
+        );
       }
     });
 
@@ -273,7 +336,13 @@ export async function PUT(request: Request, { params }: RouteContext) {
         path: storagePath,
         size: verified.size ?? (Number.isFinite(declaredSize) && declaredSize > 0 ? declaredSize : null),
       },
-      preview: { mode: "derived_from_current_epub", pageCount: 25, refreshed: true },
+      preview: {
+        mode: "derived_from_current_epub",
+        pageCount: null,
+        pageLimit: 25,
+        refreshed: false,
+        status: "pending",
+      },
       normalization: {
         status: "queued",
         optimized: false,

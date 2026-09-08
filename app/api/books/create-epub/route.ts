@@ -242,7 +242,7 @@ export async function POST(request: Request) {
       marketing_angle: nullableText(formData, "marketing_angle"),
       language_code: readText(formData, "language_code") || "es",
       preview_mode: "epub_preview",
-      preview_page_count: PREVIEW_PAGE_COUNT,
+      preview_page_count: null,
       preview_include_cover: false,
       preview_layout: "epub_reader",
       preview_progress_enabled: true,
@@ -292,7 +292,8 @@ export async function POST(request: Request) {
         catalog_url: `/catalog/${slug}`,
         preview: {
           mode: "derived_from_current_epub",
-          page_count: PREVIEW_PAGE_COUNT,
+          page_count: null,
+          page_limit: PREVIEW_PAGE_COUNT,
           status: "pending",
         },
       },
