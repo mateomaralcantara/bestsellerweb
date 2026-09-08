@@ -370,6 +370,26 @@ async function getCoverAsset(bookId: string) {
   return (data as CoverAssetRecord | null) ?? null;
 }
 
+async function hasFullEpub(bookId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("book_assets")
+    .select("id")
+    .eq("book_id", bookId)
+    .eq("asset_type", "epub")
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error(
+      "Error comprobando EPUB de muestra:",
+      error.message
+    );
+    return false;
+  }
+
+  return Boolean(data);
+}
+
 function resolveCoverUrl(book: BookRecord, asset: CoverAssetRecord | null) {
   const bookCoverUrl = cleanText(book.cover_url);
 
@@ -505,6 +525,9 @@ export default async function BookPublicPage({ params }: PageProps) {
     getPreviewPages(book.id),
   ]);
 
+  const epubFallbackAvailable =
+    await hasFullEpub(book.id);
+
   const coverUrl = resolveCoverUrl(book, coverAsset);
   const summary = getSummary(book);
   const longDescription = getMainDescription(book);
@@ -638,6 +661,7 @@ export default async function BookPublicPage({ params }: PageProps) {
                   checkoutUrl={checkoutUrl}
                   previewUrl={`/catalog/${encodeURIComponent(book.slug)}/preview`}
                   pages={previewPages}
+                  epubFallbackAvailable={epubFallbackAvailable}
                   introduction={book.introduction}
                   chapterOneExcerpt={book.chapter_one_excerpt}
                 />

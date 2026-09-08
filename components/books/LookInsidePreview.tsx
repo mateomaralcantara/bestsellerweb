@@ -18,6 +18,7 @@ type LookInsidePreviewProps = {
   checkoutUrl: string;
   previewUrl: string;
   pages: LookInsidePreviewPage[];
+  epubFallbackAvailable?: boolean;
   introduction?: string | null;
   chapterOneExcerpt?: string | null;
 };
@@ -28,12 +29,16 @@ export function LookInsidePreview({
   title,
   previewUrl,
   pages,
+  epubFallbackAvailable = false,
 }: LookInsidePreviewProps) {
   const pageCount = pages
     .filter((page) => Boolean(page.imageUrl))
     .slice(0, PREVIEW_PAGE_LIMIT).length;
 
-  if (pageCount === 0) {
+  const effectivePageCount =
+    pageCount > 0 ? pageCount : PREVIEW_PAGE_LIMIT;
+
+  if (pageCount === 0 && !epubFallbackAvailable) {
     return (
       <button
         type="button"
@@ -51,10 +56,10 @@ export function LookInsidePreview({
     <Link
       href={previewUrl}
       className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-800 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
-      aria-label={`Leer una muestra de ${pageCount} páginas de ${title}`}
+      aria-label={`Leer una muestra de ${effectivePageCount} páginas de ${title}`}
     >
       <BookOpen className="h-5 w-5" />
-      Leer muestra de {pageCount} páginas
+      Leer muestra de {effectivePageCount} páginas
     </Link>
   );
 }
