@@ -523,8 +523,132 @@ function resizeRendition(viewer: HTMLElement, rendition: EpubRendition, fixedLay
 }
 
 function originalEpubUrl(epubUrl: string) {
-  if (/[?&]variant=/.test(epubUrl)) return epubUrl;
-  return `${epubUrl}${epubUrl.includes("?") ? "&" : "?"}variant=original`;
+  // Dejamos que el endpoint elija automáticamente la mejor variante
+  // disponible (normalizada/original). No forzamos variant=original.
+  return epubUrl;
+}
+
+async function waitForUsableStage(
+  stage: HTMLElement,
+  signal: AbortSignal
+): Promise<Size> {
+  const MIN_WIDTH = 280;
+  const MIN_HEIGHT = 280;
+  const MAX_WAIT_MS = 8000;
+
+  const readSize = () => {
+    const rect = stage.getBoundingClientRect();
+
+    return {
+      width: Math.floor(rect.width),
+      height: Math.floor(rect.height),
+    };
+  };
+
+  const first = readSize();
+
+  if (
+    first.width >= MIN_WIDTH &&
+    first.height >= MIN_HEIGHT
+  ) {
+    return first;
+  }
+
+  return await new Promise<Size>((resolve, reject) => {
+    let finished = false;
+
+    const cleanup = () => {
+      observer.disconnect();
+      window.clearTimeout(timeout);
+      signal.removeEventListener("abort", abort);
+    };
+
+    const finish = (size: Size) => {
+      if (finished) return;
+
+      finished = true;
+      cleanup();
+      resolve(size);
+    };
+
+    const abort = () => {
+      if (finished) return;
+
+      finished = true;
+      cleanup();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+
+    const check = () => {
+      const size = readSize();
+
+      if (
+        size.width >= MIN_WIDTH &&
+        size.height >= MIN_HEIGHT
+      ) {
+        finish(size);
+      }
+    };
+
+    const observer = new ResizeObserver(check);
+    observer.observe(stage);
+
+    const timeout = window.setTimeout(() => {
+      const size = readSize();
+
+      if (
+        size.width >= 100 &&
+        size.height >= 100
+      ) {
+        finish(size);
+        return;
+      }
+
+      if (finished) return;
+
+      finished = true;
+      cleanup();
+
+      reject(
+        new Error(
+          `El área del lector no alcanzó un tamaño válido: ${size.width}x${size.height}.`
+        )
+      );
+    }, MAX_WAIT_MS);
+
+    signal.addEventListener("abort", abort, {
+      once: true,
+    });
+
+    check();
+  });
+}
+
+async function displayWithTimeout(
+  rendition: EpubRendition,
+  target: string | undefined,
+  timeoutMs = 15000
+) {
+  let timer = 0;
+
+  try {
+    await Promise.race([
+      rendition.display(target),
+      new Promise<never>((_, reject) => {
+        timer = window.setTimeout(() => {
+          reject(
+            new Error(
+              "Tiempo agotado preparando la primera página EPUB."
+            )
+          );
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) {
+      window.clearTimeout(timer);
+    }
+  }
 }
 
 export default function EpubReaderClient({
@@ -722,12 +846,24 @@ export default function EpubReaderClient({
 
         const stage = stageRef.current;
         const viewer = viewerRef.current;
-        if (!stage || !viewer) throw new Error("No se encontró el área persistente del lector EPUB.");
-        const stageRect = stage.getBoundingClientRect();
-        const initialStage = {
-          width: Math.max(1, Math.floor(stageRect.width)),
-          height: Math.max(1, Math.floor(stageRect.height)),
-        };
+
+        if (!stage || !viewer) {
+          throw new Error(
+            "No se encontró el área persistente del lector EPUB."
+          );
+        }
+
+        // CRITICO:
+        // epub.js no debe inicializarse sobre el 1x1 de la
+        // primera hidratación SSR.
+        const initialStage =
+          await waitForUsableStage(
+            stage,
+            controller.signal
+          );
+
+        if (cancelled) return;
+
         setStageSize(initialStage);
         const initialFit = fitPage(initialStage, nextRatio);
         const initialSize = nextFixed ? initialFit : {
@@ -824,14 +960,23 @@ export default function EpubReaderClient({
         if (saved.percent > 0) applyProgress(saved.percent);
         if (saved.cfi) {
           try {
-            await rendition.display(saved.cfi);
+            await displayWithTimeout(
+              rendition,
+              saved.cfi
+            );
           } catch (savedError) {
             console.warn("EPUB saved location inválida; abriendo inicio:", savedError);
             clearLocalProgress(progressKey);
-            await rendition.display(firstHref);
+            await displayWithTimeout(
+              rendition,
+              firstHref
+            );
           }
         } else {
-          await rendition.display(firstHref);
+          await displayWithTimeout(
+            rendition,
+            firstHref
+          );
         }
         if (cancelled) return;
 
@@ -1112,7 +1257,7 @@ export default function EpubReaderClient({
           } className="absolute right-2 top-1/2 z-20 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-[#08111a]/85 text-3xl text-white shadow-xl backdrop-blur hover:bg-[#0f2030] disabled:opacity-40 sm:right-4" aria-label="Página siguiente">›</button>
         </> : null}
 
-        {loading ? <div className="absolute inset-0 z-30 grid place-items-center bg-[#071018]"><div className="rounded-2xl border border-white/10 bg-[#08111a]/95 px-6 py-5 text-center shadow-2xl"><div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-emerald-300" /><p className="mt-3 text-sm font-semibold text-white/75">Preparando libro…</p></div></div> : null}
+        {loading ? <div className="absolute inset-0 z-30 grid place-items-center bg-[#071018]"><div className="rounded-2xl border border-white/10 bg-[#08111a]/95 px-6 py-5 text-center shadow-2xl"><div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-emerald-300" /><p className="mt-3 text-sm font-semibold text-white/75">Preparando página 1 de 25…</p></div></div> : null}
         {error ? <div className="absolute inset-0 z-30 grid place-items-center p-6"><div className="max-w-md rounded-2xl border border-red-300/20 bg-[#130b0d]/95 px-6 py-5 text-center shadow-2xl"><p className="text-base font-black text-red-200">{error}</p><button type="button" onClick={() => window.location.reload()} className="mt-4 rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-950">Reintentar</button></div></div> : null}
       </div>
 
