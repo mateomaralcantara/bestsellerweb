@@ -104,6 +104,14 @@ const REFLOWABLE_MAX_WIDTH = 1060;
 const REFLOWABLE_GUTTER = 14;
 const LOCATION_CHARS = 900;
 const SAVE_DELAY_MS = 600;
+const PREVIEW_PAGE_LIMIT = 25;
+
+function previewPercent(page: number) {
+  const safePage = clamp(page, 1, PREVIEW_PAGE_LIMIT);
+  return PREVIEW_PAGE_LIMIT <= 1
+    ? 100
+    : ((safePage - 1) / (PREVIEW_PAGE_LIMIT - 1)) * 100;
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -540,6 +548,8 @@ export default function EpubReaderClient({
   const readableSpineRef = useRef<SpineItem[]>([]);
   const locationsReadyRef = useRef(false);
   const progressRef = useRef(0);
+  const previewPageRef = useRef(1);
+  const previewAtEndRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -551,7 +561,13 @@ export default function EpubReaderClient({
   const [textZoom, setTextZoom] = useState(DEFAULT_TEXT_ZOOM);
   const [stageSize, setStageSize] = useState<Size>({ width: 1, height: 1 });
   const [progress, setProgress] = useState(0);
-  const [locationLabel, setLocationLabel] = useState("Inicio");
+  const [locationLabel, setLocationLabel] = useState(
+    mode === "preview"
+      ? `Página 1 de ${PREVIEW_PAGE_LIMIT}`
+      : "Inicio"
+  );
+  const [previewPage, setPreviewPage] = useState(1);
+  const [previewAtEnd, setPreviewAtEnd] = useState(false);
 
   const applyProgress = useCallback((value: number) => {
     const normalized = clamp(value, 0, 100);
@@ -560,6 +576,8 @@ export default function EpubReaderClient({
   }, []);
 
   const persistProgress = useCallback((cfi: string, percent: number) => {
+    if (mode === "preview") return;
+
     const normalized = clamp(percent, 0, 100);
     try {
       localStorage.setItem(localProgressKey(progressKey), JSON.stringify({ cfi, percent: normalized }));
@@ -580,8 +598,12 @@ export default function EpubReaderClient({
   }, [mode, progressKey, progressUrl]);
 
   const loadSavedProgress = useCallback(async (): Promise<SavedProgress> => {
+    if (mode === "preview") {
+      return { cfi: null, percent: 0 };
+    }
+
     const local = readLocalProgress(progressKey);
-    if (mode !== "full" || !progressUrl) return local;
+    if (!progressUrl) return local;
     try {
       const response = await fetch(progressUrl, { cache: "no-store" });
       if (!response.ok) return local;
@@ -655,6 +677,16 @@ export default function EpubReaderClient({
       locationsReadyRef.current = false;
       currentCfiRef.current = null;
       readableSpineRef.current = [];
+      previewPageRef.current = 1;
+      previewAtEndRef.current = false;
+      setPreviewPage(1);
+      setPreviewAtEnd(false);
+      setLocationLabel(
+        mode === "preview"
+          ? `Página 1 de ${PREVIEW_PAGE_LIMIT}`
+          : "Inicio"
+      );
+      applyProgress(0);
       setFixedLayout(false);
       setPageRatio(DEFAULT_PAGE_RATIO);
       setFixedZoom(DEFAULT_FIXED_ZOOM);
@@ -744,6 +776,22 @@ export default function EpubReaderClient({
           const cfi = asText(location.start?.cfi) || null;
           const href = asText(location.start?.href) || null;
           currentCfiRef.current = cfi;
+
+          if (mode === "preview") {
+            const atEnd = Boolean(location.atEnd);
+
+            previewAtEndRef.current = atEnd;
+            setPreviewAtEnd(atEnd);
+
+            const page = previewPageRef.current;
+            applyProgress(previewPercent(page));
+            setLocationLabel(
+              `Página ${page} de ${PREVIEW_PAGE_LIMIT}`
+            );
+
+            return;
+          }
+
           const nextPercent = progressFromLocation({
             book,
             location,
@@ -751,9 +799,25 @@ export default function EpubReaderClient({
             locationsReady: locationsReadyRef.current,
             previous: progressRef.current,
           });
+
           applyProgress(nextPercent);
-          setLocationLabel(href ? href.split("/").pop()?.replace(/\.(xhtml|html)$/i, "") || "Página" : "Página");
-          if (readyRef.current && cfi && !isSkippableSection(href)) persistProgress(cfi, nextPercent);
+
+          setLocationLabel(
+            href
+              ? href
+                  .split("/")
+                  .pop()
+                  ?.replace(/\.(xhtml|html)$/i, "") || "Página"
+              : "Página"
+          );
+
+          if (
+            readyRef.current &&
+            cfi &&
+            !isSkippableSection(href)
+          ) {
+            persistProgress(cfi, nextPercent);
+          }
         });
 
         const saved = await savedPromise;
@@ -790,19 +854,39 @@ export default function EpubReaderClient({
           ratio: nextRatio,
         });
 
-        void book.locations.generate(LOCATION_CHARS).then(() => {
-          if (cancelled) return;
-          locationsReadyRef.current = true;
-          const cfi = currentCfiRef.current;
-          if (!cfi) return;
-          try {
-            const ratio = book.locations.percentageFromCfi(cfi);
-            if (!Number.isFinite(ratio)) return;
-            const exact = clamp(ratio * 100, 0, 100);
-            applyProgress(exact);
-            if (readyRef.current) persistProgress(cfi, exact);
-          } catch {}
-        }).catch((locationError) => console.warn("EPUB locations no disponibles:", locationError));
+        if (mode === "full") {
+          void book.locations
+            .generate(LOCATION_CHARS)
+            .then(() => {
+              if (cancelled) return;
+
+              locationsReadyRef.current = true;
+
+              const cfi = currentCfiRef.current;
+              if (!cfi) return;
+
+              try {
+                const ratio =
+                  book.locations.percentageFromCfi(cfi);
+
+                if (!Number.isFinite(ratio)) return;
+
+                const exact = clamp(ratio * 100, 0, 100);
+
+                applyProgress(exact);
+
+                if (readyRef.current) {
+                  persistProgress(cfi, exact);
+                }
+              } catch {}
+            })
+            .catch((locationError) =>
+              console.warn(
+                "EPUB locations no disponibles:",
+                locationError
+              )
+            );
+        }
       } catch (bootError) {
         if (controller.signal.aborted) return;
         console.error("EPUB reader error:", bootError);
@@ -867,19 +951,94 @@ export default function EpubReaderClient({
     renditionRef.current?.themes.select(theme);
   }, [theme]);
 
-  const move = useCallback(async (direction: "prev" | "next") => {
-    const rendition = renditionRef.current;
-    if (!rendition || moving) return;
-    setMoving(true);
-    try {
-      if (direction === "next") await rendition.next();
-      else await rendition.prev();
-    } catch (moveError) {
-      console.warn("No se pudo cambiar página EPUB:", moveError);
-    } finally {
-      window.setTimeout(() => setMoving(false), 100);
-    }
-  }, [moving]);
+  const move = useCallback(
+    async (direction: "prev" | "next") => {
+      const rendition = renditionRef.current;
+
+      if (!rendition || moving) return;
+
+      if (mode === "preview") {
+        if (
+          direction === "prev" &&
+          previewPageRef.current <= 1
+        ) {
+          return;
+        }
+
+        if (
+          direction === "next" &&
+          (
+            previewPageRef.current >= PREVIEW_PAGE_LIMIT ||
+            previewAtEndRef.current
+          )
+        ) {
+          return;
+        }
+      }
+
+      setMoving(true);
+
+      try {
+        const beforeCfi = currentCfiRef.current;
+
+        if (direction === "next") {
+          await rendition.next();
+        } else {
+          await rendition.prev();
+        }
+
+        if (mode === "preview") {
+          await new Promise<void>((resolve) => {
+            window.requestAnimationFrame(() => resolve());
+          });
+
+          const afterCfi = currentCfiRef.current;
+
+          if (
+            beforeCfi &&
+            afterCfi &&
+            beforeCfi === afterCfi
+          ) {
+            if (direction === "next") {
+              previewAtEndRef.current = true;
+              setPreviewAtEnd(true);
+            }
+
+            return;
+          }
+
+          const nextPage = clamp(
+            previewPageRef.current +
+              (direction === "next" ? 1 : -1),
+            1,
+            PREVIEW_PAGE_LIMIT
+          );
+
+          previewPageRef.current = nextPage;
+          setPreviewPage(nextPage);
+
+          if (direction === "prev") {
+            previewAtEndRef.current = false;
+            setPreviewAtEnd(false);
+          }
+
+          applyProgress(previewPercent(nextPage));
+
+          setLocationLabel(
+            `Página ${nextPage} de ${PREVIEW_PAGE_LIMIT}`
+          );
+        }
+      } catch (moveError) {
+        console.warn(
+          "No se pudo cambiar página EPUB:",
+          moveError
+        );
+      } finally {
+        window.setTimeout(() => setMoving(false), 100);
+      }
+    },
+    [applyProgress, mode, moving]
+  );
 
   const currentScale = fixedLayout ? fixedZoom : textZoom;
   const scaleMin = fixedLayout ? MIN_FIXED_ZOOM : MIN_TEXT_ZOOM;
@@ -937,8 +1096,20 @@ export default function EpubReaderClient({
         </div>
 
         {!loading && !error ? <>
-          <button type="button" onClick={() => void move("prev")} disabled={moving} className="absolute left-2 top-1/2 z-20 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-[#08111a]/85 text-3xl text-white shadow-xl backdrop-blur hover:bg-[#0f2030] disabled:opacity-40 sm:left-4" aria-label="Página anterior">‹</button>
-          <button type="button" onClick={() => void move("next")} disabled={moving} className="absolute right-2 top-1/2 z-20 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-[#08111a]/85 text-3xl text-white shadow-xl backdrop-blur hover:bg-[#0f2030] disabled:opacity-40 sm:right-4" aria-label="Página siguiente">›</button>
+          <button type="button" onClick={() => void move("prev")} disabled={
+            moving ||
+            (mode === "preview" && previewPage <= 1)
+          } className="absolute left-2 top-1/2 z-20 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-[#08111a]/85 text-3xl text-white shadow-xl backdrop-blur hover:bg-[#0f2030] disabled:opacity-40 sm:left-4" aria-label="Página anterior">‹</button>
+          <button type="button" onClick={() => void move("next")} disabled={
+            moving ||
+            (
+              mode === "preview" &&
+              (
+                previewPage >= PREVIEW_PAGE_LIMIT ||
+                previewAtEnd
+              )
+            )
+          } className="absolute right-2 top-1/2 z-20 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-[#08111a]/85 text-3xl text-white shadow-xl backdrop-blur hover:bg-[#0f2030] disabled:opacity-40 sm:right-4" aria-label="Página siguiente">›</button>
         </> : null}
 
         {loading ? <div className="absolute inset-0 z-30 grid place-items-center bg-[#071018]"><div className="rounded-2xl border border-white/10 bg-[#08111a]/95 px-6 py-5 text-center shadow-2xl"><div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-emerald-300" /><p className="mt-3 text-sm font-semibold text-white/75">Preparando libro…</p></div></div> : null}
@@ -947,7 +1118,15 @@ export default function EpubReaderClient({
 
       <footer className="flex h-10 shrink-0 items-center gap-3 border-t border-white/10 bg-[#09131d] px-4">
         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-emerald-400 transition-[width]" style={{ width: `${Math.round(clamp(progress, 0, 100))}%` }} /></div>
-        <span className="w-11 text-right text-[11px] font-bold text-white/55">{Math.round(clamp(progress, 0, 100))}%</span>
+        {mode === "preview" ? (
+          <span className="min-w-28 text-right text-[11px] font-black text-emerald-300">
+            Página {previewPage} de {PREVIEW_PAGE_LIMIT}
+          </span>
+        ) : (
+          <span className="w-11 text-right text-[11px] font-bold text-white/55">
+            {Math.round(clamp(progress, 0, 100))}%
+          </span>
+        )}
       </footer>
     </section>
   );

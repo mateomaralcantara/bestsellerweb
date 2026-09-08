@@ -217,6 +217,8 @@ export default async function CatalogPreviewPage({
       <div
         data-libroseller-epub-reader="true"
         data-libroseller-preview-fallback="epub"
+        data-preview-page-count={PREVIEW_PAGE_LIMIT}
+        data-preview-page-limit={PREVIEW_PAGE_LIMIT}
         className="h-[100dvh] overflow-hidden bg-[#071018]"
       >
         <EpubReaderClient
