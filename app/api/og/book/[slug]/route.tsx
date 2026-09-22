@@ -78,49 +78,43 @@ export async function GET(_request: Request, { params }: RouteContext) {
           background: "#07111f",
         }}
       >
-        <div
+        <img
+          src={coverUrl}
+          alt=""
+          width={OG_WIDTH}
+          height={OG_HEIGHT}
           style={{
-            width: 194,
-            height: 285,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            borderRadius: 10,
-            overflow: "hidden",
-            background: "#ffffff",
-            boxShadow: "0 14px 34px rgba(0,0,0,0.42)",
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            opacity: 0.72,
           }}
-        >
-          <img
-            src={coverUrl}
-            alt={`Portada completa de ${title}`}
-            width={194}
-            height={285}
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "contain",
-            }}
-          />
-        </div>
+        />
 
         <div
           style={{
             position: "absolute",
-            left: 18,
-            bottom: 14,
+            inset: 0,
             display: "flex",
-            alignItems: "center",
-            borderRadius: 999,
-            background: "rgba(255,255,255,0.10)",
-            color: "white",
-            padding: "6px 11px",
-            fontSize: 14,
-            fontWeight: 800,
+            background: "rgba(0,0,0,0.16)",
           }}
-        >
-          LibroSeller
-        </div>
+        />
+
+        <img
+          src={coverUrl}
+          alt={`Portada completa de ${title}`}
+          width={OG_WIDTH}
+          height={OG_HEIGHT}
+          style={{
+            position: "relative",
+            zIndex: 2,
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+          }}
+        />
       </div>
     ),
     {
