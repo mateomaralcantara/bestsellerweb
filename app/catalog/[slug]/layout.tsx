@@ -158,7 +158,7 @@ export async function generateMetadata({ params }: Omit<LayoutProps, "children">
 
   const description = (book.description_short || book.description_long || book.subtitle || `Compra y lee ${book.title} en LibroSeller.`).slice(0, 160);
   const canonical = `${SITE_URL}/catalog/${encodeURIComponent(book.slug)}`;
-  const socialImage = `${SITE_URL}/api/og/book/${encodeURIComponent(book.slug)}?v=full-cover-v2`;
+  const socialImage = `${SITE_URL}/api/og/book/${encodeURIComponent(book.slug)}?v=full-cover-v3-lite`;
 
   return {
     title: `${book.title} | LibroSeller`,
@@ -173,8 +173,8 @@ export async function generateMetadata({ params }: Omit<LayoutProps, "children">
       images: [
         {
           url: socialImage,
-          width: 1200,
-          height: 630,
+          width: 600,
+          height: 315,
           alt: `Portada completa de ${book.title}`,
           type: "image/png",
         },
@@ -187,8 +187,8 @@ export async function generateMetadata({ params }: Omit<LayoutProps, "children">
       images: [
         {
           url: socialImage,
-          width: 1200,
-          height: 630,
+          width: 600,
+          height: 315,
           alt: `Portada completa de ${book.title}`,
         },
       ],

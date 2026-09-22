@@ -4,8 +4,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const OG_WIDTH = 1200;
-const OG_HEIGHT = 630;
+const OG_WIDTH = 600;
+const OG_HEIGHT = 315;
 
 type RouteContext = {
   params: Promise<{ slug: string }>;
@@ -49,12 +49,12 @@ export async function GET(_request: Request, { params }: RouteContext) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: "linear-gradient(135deg, #07111f 0%, #155eef 100%)",
+            background: "#07111f",
             color: "white",
-            fontSize: 64,
+            fontSize: 34,
             fontWeight: 900,
             textAlign: "center",
-            padding: "70px",
+            padding: "36px",
           }}
         >
           {title}
@@ -78,51 +78,24 @@ export async function GET(_request: Request, { params }: RouteContext) {
           background: "#07111f",
         }}
       >
-        <img
-          src={coverUrl}
-          alt=""
-          width={OG_WIDTH}
-          height={OG_HEIGHT}
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            opacity: 0.28,
-          }}
-        />
-
         <div
           style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            background:
-              "linear-gradient(90deg, rgba(7,17,31,0.78) 0%, rgba(7,17,31,0.42) 50%, rgba(7,17,31,0.78) 100%)",
-          }}
-        />
-
-        <div
-          style={{
-            position: "relative",
-            zIndex: 2,
-            width: 410,
-            height: 590,
+            width: 194,
+            height: 285,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            borderRadius: 14,
+            borderRadius: 10,
             overflow: "hidden",
-            background: "rgba(255,255,255,0.04)",
-            boxShadow: "0 24px 70px rgba(0,0,0,0.45)",
+            background: "#ffffff",
+            boxShadow: "0 14px 34px rgba(0,0,0,0.42)",
           }}
         >
           <img
             src={coverUrl}
             alt={`Portada completa de ${title}`}
-            width={410}
-            height={590}
+            width={194}
+            height={285}
             style={{
               width: "100%",
               height: "100%",
@@ -134,18 +107,16 @@ export async function GET(_request: Request, { params }: RouteContext) {
         <div
           style={{
             position: "absolute",
-            left: 34,
-            bottom: 24,
-            zIndex: 3,
+            left: 18,
+            bottom: 14,
             display: "flex",
             alignItems: "center",
             borderRadius: 999,
-            background: "rgba(7,17,31,0.82)",
+            background: "rgba(255,255,255,0.10)",
             color: "white",
-            padding: "10px 18px",
-            fontSize: 24,
+            padding: "6px 11px",
+            fontSize: 14,
             fontWeight: 800,
-            letterSpacing: "-0.02em",
           }}
         >
           LibroSeller
