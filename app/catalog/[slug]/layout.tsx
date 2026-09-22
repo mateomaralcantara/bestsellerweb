@@ -158,7 +158,7 @@ export async function generateMetadata({ params }: Omit<LayoutProps, "children">
 
   const description = (book.description_short || book.description_long || book.subtitle || `Compra y lee ${book.title} en LibroSeller.`).slice(0, 160);
   const canonical = `${SITE_URL}/catalog/${encodeURIComponent(book.slug)}`;
-  const socialImage = `${SITE_URL}/api/og/book/${encodeURIComponent(book.slug)}`;
+  const socialImage = `${SITE_URL}/api/og/book/${encodeURIComponent(book.slug)}?v=full-cover-v2`;
 
   return {
     title: `${book.title} | LibroSeller`,
