@@ -55,6 +55,17 @@ function normalizePublicUrl(value: string | null | undefined) {
   return `${SITE_URL}${raw.startsWith("/") ? "" : "/"}${raw}`;
 }
 
+function getSocialImageVersion(value: string) {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 0).toString(36);
+}
+
 async function getBook(slug: string): Promise<ProductBook | null> {
   const { data } = await supabaseAdmin
     .from("books")
@@ -183,7 +194,9 @@ export async function generateMetadata({
   ).slice(0, 160);
 
   const canonical = `${SITE_URL}/catalog/${encodeURIComponent(book.slug)}`;
-  const socialImage = `${SITE_URL}/api/share-image/${encodeURIComponent(book.slug)}?v=book-cover-v5`;
+  const coverUrl = normalizePublicUrl(book.cover_url);
+  const socialImageVersion = getSocialImageVersion(`${book.id}|${coverUrl}|book-cover-v6`);
+  const socialImage = `${SITE_URL}/api/share-image/${encodeURIComponent(book.slug)}?v=${socialImageVersion}`;
 
   return {
     metadataBase: new URL(SITE_URL),
