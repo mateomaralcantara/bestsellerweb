@@ -596,7 +596,7 @@ export default async function BookPublicPage({ params }: PageProps) {
                 <Image
                   src={coverUrl}
                   alt={`Portada de ${book.title}`}
-                  className="book-cover-shadow aspect-[3/4] w-full rounded-r-[20px] rounded-l-md object-cover"
+                  className="book-cover-shadow h-auto w-full rounded-r-[20px] rounded-l-md object-contain"
 
               width={600}
               height={900}
