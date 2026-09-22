@@ -176,7 +176,7 @@ export default async function Catalog9x({ searchParams }: Props) {
             return (
               <Link key={book.book_id} href={`/catalog/${book.slug}`} className="group overflow-hidden rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
                 <div className="relative">
-                  {book.cover_url ? <Image src={book.cover_url} alt={`Portada de ${book.title}`} width={480} height={720} className="aspect-[2/3] w-full rounded-2xl object-cover" /> : <div className="aspect-[2/3] rounded-2xl bg-slate-100" />}
+                  {book.cover_url ? <Image src={book.cover_url} alt={`Portada de ${book.title}`} width={480} height={720} className="aspect-[2/3] w-full rounded-2xl bg-white object-contain" /> : <div className="aspect-[2/3] rounded-2xl bg-slate-100" />}
                   {index < 3 && bestseller > 0 ? <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-slate-950/90 px-2.5 py-1 text-[10px] font-black text-white"><TrendingUp className="h-3 w-3" /> Bestseller</span> : null}
                 </div>
                 <p className="mt-4 text-[11px] font-black uppercase tracking-[0.16em] text-[#155eef]">{book.primary_category || book.primary_niche || "LibroSeller"}</p>
