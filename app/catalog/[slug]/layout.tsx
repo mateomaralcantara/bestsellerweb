@@ -171,6 +171,14 @@ export async function generateMetadata({ params }: Omit<LayoutProps, "children">
       url: canonical,
       siteName: "LibroSeller",
       images: [
+        ...(book.cover_url
+          ? [
+              {
+                url: book.cover_url,
+                alt: `Portada completa de ${book.title}`,
+              },
+            ]
+          : []),
         {
           url: socialImage,
           width: 600,
@@ -184,14 +192,16 @@ export async function generateMetadata({ params }: Omit<LayoutProps, "children">
       card: "summary_large_image",
       title: book.title,
       description,
-      images: [
-        {
-          url: socialImage,
-          width: 600,
-          height: 315,
-          alt: `Portada completa de ${book.title}`,
-        },
-      ],
+      images: book.cover_url
+        ? [{ url: book.cover_url, alt: `Portada completa de ${book.title}` }]
+        : [
+            {
+              url: socialImage,
+              width: 600,
+              height: 315,
+              alt: `Portada completa de ${book.title}`,
+            },
+          ],
     },
   };
 }
