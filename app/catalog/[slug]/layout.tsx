@@ -41,6 +41,20 @@ function safeSlug(value: string) {
   }
 }
 
+function normalizePublicUrl(value: string | null | undefined) {
+  const raw = value?.trim() || "";
+
+  if (!raw) {
+    return "";
+  }
+
+  if (raw.startsWith("https://") || raw.startsWith("http://")) {
+    return raw;
+  }
+
+  return `${SITE_URL}${raw.startsWith("/") ? "" : "/"}${raw}`;
+}
+
 async function getBook(slug: string): Promise<ProductBook | null> {
   const { data } = await supabaseAdmin
     .from("books")
@@ -151,58 +165,69 @@ async function getIntelligence(book: ProductBook) {
   return { metrics, preflight: preflight ?? null, recommendations };
 }
 
-export async function generateMetadata({ params }: Omit<LayoutProps, "children">): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: Omit<LayoutProps, "children">): Promise<Metadata> {
   const slug = safeSlug((await params).slug);
   const book = slug ? await getBook(slug) : null;
-  if (!book) return {};
 
-  const description = (book.description_short || book.description_long || book.subtitle || `Compra y lee ${book.title} en LibroSeller.`).slice(0, 160);
+  if (!book) {
+    return {};
+  }
+
+  const description = (
+    book.description_short ||
+    book.description_long ||
+    book.subtitle ||
+    `Compra y lee ${book.title} en LibroSeller.`
+  ).slice(0, 160);
+
   const canonical = `${SITE_URL}/catalog/${encodeURIComponent(book.slug)}`;
-  const socialImage = `${SITE_URL}/api/og/book/${encodeURIComponent(book.slug)}?v=fullscreen-cover-v4`;
+  const coverUrl = normalizePublicUrl(book.cover_url);
 
   return {
+    metadataBase: new URL(SITE_URL),
     title: `${book.title} | LibroSeller`,
     description,
-    alternates: { canonical },
+
+    alternates: {
+      canonical,
+    },
+
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+        "max-video-preview": -1,
+      },
+    },
+
     openGraph: {
       type: "book",
+      locale: "es_DO",
       title: book.title,
       description,
       url: canonical,
       siteName: "LibroSeller",
-      images: [
-        {
-          url: socialImage,
-          width: 600,
-          height: 315,
-          alt: `Portada completa de ${book.title}`,
-          type: "image/png",
-        },
-        ...(book.cover_url
-          ? [
-              {
-                url: book.cover_url,
-                alt: `Portada completa de ${book.title}`,
-              },
-            ]
-          : []),
-      ],
+      images: coverUrl
+        ? [
+            {
+              url: coverUrl,
+              alt: `Portada completa de ${book.title}`,
+            },
+          ]
+        : undefined,
     },
+
     twitter: {
       card: "summary_large_image",
       title: book.title,
       description,
-      images: [
-        {
-          url: socialImage,
-          width: 600,
-          height: 315,
-          alt: `Portada completa de ${book.title}`,
-        },
-        ...(book.cover_url
-          ? [{ url: book.cover_url, alt: `Portada completa de ${book.title}` }]
-          : []),
-      ],
+      images: coverUrl ? [coverUrl] : undefined,
     },
   };
 }
@@ -220,6 +245,7 @@ export default async function BookProductLayout({ children, params }: LayoutProp
   ]);
 
   const canonical = `${SITE_URL}/catalog/${encodeURIComponent(book.slug)}`;
+  const coverUrl = normalizePublicUrl(book.cover_url);
   const description = book.description_short || book.description_long || book.subtitle || `Libro ${book.title}`;
   const jsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
@@ -228,7 +254,7 @@ export default async function BookProductLayout({ children, params }: LayoutProp
     name: book.title,
     description,
     url: canonical,
-    image: book.cover_url || undefined,
+    image: coverUrl || undefined,
     inLanguage: book.language_code || "es",
     isbn: book.isbn_13 || undefined,
     genre: book.primary_category || undefined,
