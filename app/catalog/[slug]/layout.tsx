@@ -158,6 +158,7 @@ export async function generateMetadata({ params }: Omit<LayoutProps, "children">
 
   const description = (book.description_short || book.description_long || book.subtitle || `Compra y lee ${book.title} en LibroSeller.`).slice(0, 160);
   const canonical = `${SITE_URL}/catalog/${encodeURIComponent(book.slug)}`;
+  const socialImage = `${SITE_URL}/api/og/book/${encodeURIComponent(book.slug)}`;
 
   return {
     title: `${book.title} | LibroSeller`,
@@ -169,13 +170,28 @@ export async function generateMetadata({ params }: Omit<LayoutProps, "children">
       description,
       url: canonical,
       siteName: "LibroSeller",
-      images: book.cover_url ? [{ url: book.cover_url, alt: `Portada de ${book.title}` }] : undefined,
+      images: [
+        {
+          url: socialImage,
+          width: 1200,
+          height: 630,
+          alt: `Portada completa de ${book.title}`,
+          type: "image/png",
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
       title: book.title,
       description,
-      images: book.cover_url ? [book.cover_url] : undefined,
+      images: [
+        {
+          url: socialImage,
+          width: 1200,
+          height: 630,
+          alt: `Portada completa de ${book.title}`,
+        },
+      ],
     },
   };
 }
