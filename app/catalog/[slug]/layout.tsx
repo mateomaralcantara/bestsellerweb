@@ -158,7 +158,7 @@ export async function generateMetadata({ params }: Omit<LayoutProps, "children">
 
   const description = (book.description_short || book.description_long || book.subtitle || `Compra y lee ${book.title} en LibroSeller.`).slice(0, 160);
   const canonical = `${SITE_URL}/catalog/${encodeURIComponent(book.slug)}`;
-  const socialImage = `${SITE_URL}/api/og/book/${encodeURIComponent(book.slug)}?v=full-cover-v3-lite`;
+  const socialImage = `${SITE_URL}/api/og/book/${encodeURIComponent(book.slug)}?v=fullscreen-cover-v4`;
 
   return {
     title: `${book.title} | LibroSeller`,
@@ -171,6 +171,13 @@ export async function generateMetadata({ params }: Omit<LayoutProps, "children">
       url: canonical,
       siteName: "LibroSeller",
       images: [
+        {
+          url: socialImage,
+          width: 600,
+          height: 315,
+          alt: `Portada completa de ${book.title}`,
+          type: "image/png",
+        },
         ...(book.cover_url
           ? [
               {
@@ -179,29 +186,23 @@ export async function generateMetadata({ params }: Omit<LayoutProps, "children">
               },
             ]
           : []),
-        {
-          url: socialImage,
-          width: 600,
-          height: 315,
-          alt: `Portada completa de ${book.title}`,
-          type: "image/png",
-        },
       ],
     },
     twitter: {
       card: "summary_large_image",
       title: book.title,
       description,
-      images: book.cover_url
-        ? [{ url: book.cover_url, alt: `Portada completa de ${book.title}` }]
-        : [
-            {
-              url: socialImage,
-              width: 600,
-              height: 315,
-              alt: `Portada completa de ${book.title}`,
-            },
-          ],
+      images: [
+        {
+          url: socialImage,
+          width: 600,
+          height: 315,
+          alt: `Portada completa de ${book.title}`,
+        },
+        ...(book.cover_url
+          ? [{ url: book.cover_url, alt: `Portada completa de ${book.title}` }]
+          : []),
+      ],
     },
   };
 }
