@@ -427,7 +427,7 @@ function AmazonBookRow({ book }: { book: CatalogBook }) {
           <Image
             src={getCover(book)}
             alt={book.title}
-            className="book-cover-shadow relative aspect-[2/3] w-full max-w-[140px] rounded-r-lg rounded-l-sm object-cover transition duration-500 group-hover:-translate-y-1 group-hover:rotate-1 group-hover:scale-[1.025]"
+            className="book-cover-shadow relative aspect-[2/3] w-full max-w-[140px] rounded-r-lg rounded-l-sm bg-white object-contain transition duration-500 group-hover:-translate-y-1 group-hover:rotate-1 group-hover:scale-[1.025]"
 
               width={600}
               height={900}
