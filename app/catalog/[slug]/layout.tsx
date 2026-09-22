@@ -183,7 +183,6 @@ export async function generateMetadata({
   ).slice(0, 160);
 
   const canonical = `${SITE_URL}/catalog/${encodeURIComponent(book.slug)}`;
-  const coverUrl = normalizePublicUrl(book.cover_url);
   const socialImage = `${SITE_URL}/api/share-image/${encodeURIComponent(book.slug)}?v=book-cover-v5`;
 
   return {
